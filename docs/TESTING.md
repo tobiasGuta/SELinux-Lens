@@ -50,6 +50,8 @@ The correlation UI was exercised in the same session with the fictional demo and
 
 ## Future integration tests
 
+The uninstalled reader has a separate private-bus suite. On Fedora, install the standard Gio Python bindings and `dbus-run-session`, then use `make test-prototype`. The suite checks peer credential pinning, absent interaction flags, malformed calls, ineligible and denied callers, disconnect cancellation, concurrency, rate limits, evidence redaction and reply size. It uses synthetic evidence and simulated session and Polkit outcomes. The suite also passed in an isolated rootless Fedora 45 container. Testing the system-service boundary with real authorization and SELinux confinement requires a Fedora VM.
+
 Use synthetic audit streams and keep personal raw logs out of fixtures. Correlation tests cover full audit identity, capture and node boundaries, duplicate and malformed lines, quoted field boundaries, incomplete PATH coverage, permissive records, UTC time, and the v1 report boundary. Add integration tests for Polkit authorization denial and helper failure in an isolated Fedora VM. Ordinary CI leaves host SELinux policy intact.
 
 ## Test claims
