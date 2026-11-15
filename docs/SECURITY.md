@@ -33,7 +33,7 @@ Attacker-controlled paths, process names, audit fields, malformed log lines, loc
 - A user-chosen export path can overwrite an existing file through the regular GTK save dialog; the current implementation uses regular file writes, not hardened atomic writes.
 - Report redaction is partial: process names, PIDs, source/target contexts and the report notice remain. Do not publish raw/real reports without review.
 - AVC-only records can omit paths or be misleading without related audit records. Correlation is planned.
-- Host audit access and tools differ by Fedora configuration and version. Current Fedora GUI has not been smoke-tested yet.
+- Host audit access and tools differ by Fedora configuration and version. See the [Fedora 45 smoke test](TESTING.md#fedora-gnome-smoke-test) for the audit permission result on the development workstation.
 - A local attacker who already controls the user session can read in-memory audit data shown to that user; there is no protected secret store.
 
 ## Future privileged reader — design constraints

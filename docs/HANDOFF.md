@@ -2,7 +2,7 @@
 
 ## What has been created
 
-The initial v0.1 code implements a GTK4/Libadwaita inspection shell around read-only `getenforce` and `ausearch`, a regex-based AVC parser, deterministic interpretation, synthetic demo, JSON export, tests and CI. This is a preview: core tests can run without Fedora; **the GUI has now had a limited, user-reported Fedora GNOME smoke test; broader functionality remains unverified**.
+The initial v0.1 code implements a GTK4/Libadwaita inspection shell around read-only `getenforce` and `ausearch`, a regex-based AVC parser, deterministic interpretation, synthetic demo, JSON export, tests and CI. Fedora 45 GNOME results and remaining checks are in [TESTING.md](TESTING.md#fedora-gnome-smoke-test).
 
 ## Do this first
 
@@ -23,11 +23,11 @@ These are **user-reported observations from screenshots and terminal output**, n
 - The user's read-only administrative checks `sudo ausearch -m AVC,USER_AVC -ts recent` and `sudo ausearch -m AVC,USER_AVC -ts today` each returned `<no matches>`. These indicate no matching records in those audit queries at that time, not proof no denials occurred or were logged.
 - Improve the real-mode empty state: replace unused detail headings with a focused permission explanation and next steps; keep that distinct from successfully querying an empty window.
 - GitHub Actions for initial implementation commit `b802068694be4adff6eae927e051ef51538e80fb` passed Python 3.11 and 3.13 compile/unit checks.
-- Exact Fedora/GTK/Libadwaita versions and the behavior of JSON export are not yet independently recorded.
+- See [the follow-up Fedora 45 checks](TESTING.md#fedora-gnome-smoke-test) for exact versions and in-process JSON export.
 
 ## Known implementation gaps
 
-- Basic GTK rendering was observed in a user screenshot; file chooser and end-to-end export have not been verified.
+- GTK rendering and the in-process chooser were tested on Fedora 45. Portal-backed export and physical keyboard accessibility checks remain open.
 - Audit output cap currently occurs after capture; memory use is not bounded by it.
 - Audit collection reads only recent AVC/USER_AVC and does not correlate companion records.
 - UI always displays raw AVC text locally; export redacts only target path/name, not all sensitive fields.
