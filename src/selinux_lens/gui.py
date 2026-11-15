@@ -77,6 +77,7 @@ class LensWindow(Adw.ApplicationWindow):
         self._busy = False
         self._snapshot = Snapshot("Unknown", (), "ausearch")
         self._visible: list[Denial] = []
+        self._export_dialog: Gtk.FileChooserNative | None = None
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
@@ -350,11 +351,15 @@ class LensWindow(Adw.ApplicationWindow):
         self.related_records.set_text("\n\n".join(previews))
 
     def _export_clicked(self, _button: Gtk.Button) -> None:
+        if self._export_dialog is not None:
+            return
         dialog = Gtk.FileChooserNative.new(
             "Export SELinux Lens report", self,
             Gtk.FileChooserAction.SAVE, "Save", "Cancel"
         )
+        dialog.set_modal(True)
         dialog.set_current_name("selinux-lens-report.json")
+        self._export_dialog = dialog
 
         def response(chooser: Gtk.FileChooserNative, result: int) -> None:
             try:
@@ -374,6 +379,7 @@ class LensWindow(Adw.ApplicationWindow):
             except OSError as exc:
                 self.notice_label.set_text(f"Export failed: {exc}")
             finally:
+                self._export_dialog = None
                 chooser.destroy()
 
         dialog.connect("response", response)
@@ -383,7 +389,10 @@ class LensWindow(Adw.ApplicationWindow):
 class LensApplication(Adw.Application):
     def __init__(self, *, demo: bool) -> None:
         super().__init__(
-            application_id="io.github.tobiasguta.SELinuxLens",
+            application_id=(
+                "io.github.tobiasguta.SELinuxLens.Demo" if demo
+                else "io.github.tobiasguta.SELinuxLens"
+            ),
             flags=Gio.ApplicationFlags.DEFAULT_FLAGS,
         )
         self.demo = demo
