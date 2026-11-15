@@ -2,7 +2,7 @@
 
 ## What has been created
 
-The initial v0.1 code implements a GTK4/Libadwaita inspection shell around read-only `getenforce` and `ausearch`, a regex-based AVC parser, deterministic interpretation, synthetic demo, JSON export, tests and CI. This is a preview: core tests can run without Fedora; **the GUI has not yet been live-tested on Fedora**.
+The initial v0.1 code implements a GTK4/Libadwaita inspection shell around read-only `getenforce` and `ausearch`, a regex-based AVC parser, deterministic interpretation, synthetic demo, JSON export, tests and CI. Fedora 45 GNOME results and remaining checks are in [TESTING.md](TESTING.md#fedora-gnome-smoke-test).
 
 ## Do this first
 
@@ -16,7 +16,7 @@ The initial v0.1 code implements a GTK4/Libadwaita inspection shell around read-
 
 ## Known implementation gaps
 
-- GTK rendering and file chooser have not been runtime-verified.
+- GTK rendering and the in-process chooser were tested on Fedora 45. Portal-backed export and physical keyboard accessibility checks remain open.
 - Audit output cap currently occurs after capture; memory use is not bounded by it.
 - Audit collection reads only recent AVC/USER_AVC and does not correlate companion records.
 - UI always displays raw AVC text locally; export redacts only target path/name, not all sensitive fields.

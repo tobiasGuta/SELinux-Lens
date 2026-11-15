@@ -9,7 +9,7 @@ The roadmap is a plan, **not a list of implemented features**. Prioritize safety
 [x] Clearly distinguish permissive flag, observations and hypotheses  
 [x] Non-root fixed-argv audit command invocation and degraded states  
 [x] Fictional demo mode, redacted JSON report, unit tests/CI  
-[ ] Fedora GNOME real-device smoke test; fix UI compatibility issues  
+[ ] Complete Fedora GNOME real-device smoke testing. [Fedora 45 results and remaining checks](TESTING.md#fedora-gnome-smoke-test)\
 [ ] Audit access tested for ordinary user vs administrator on supported Fedora versions
 
 ## v0.1.1 — Production-quality input boundary
