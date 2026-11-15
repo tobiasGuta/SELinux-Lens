@@ -36,6 +36,14 @@ On 2026-11-15 the application ran in a Fedora Workstation 45 GNOME Wayland sessi
 9. Close the app, verify no background helper or daemon remains; inspect local files for no unexpected persisted audit data.
 10. Record exact Fedora, GNOME, GTK, Libadwaita, Python and SELinux versions plus observations in the PR or release notes.
 
+## User-reported Fedora observations (2026-11-15)
+
+- **Observed:** `bash run.sh --demo` launches the GTK interface and visibly renders all three fictional records with the first record's context, reasoning, and raw AVC text.
+- **Observed:** `bash run.sh` launches in real mode, shows `SELinux: Enforcing`, and explicitly reports denied audit access for the ordinary user.
+- **Observed:** `sudo ausearch -m AVC,USER_AVC -ts recent` and `sudo ausearch -m AVC,USER_AVC -ts today` returned `<no matches>` at the time of testing. Distinguish no matching audit records from insufficient permission. Neither proves the absence of any unlogged denial.
+- **Not verified:** search/filter interaction, JSON export, all GTK dialog behavior, accessibility, actual populated privileged audit data in GUI, complete Fedora/package version matrix.
+- **Follow-up:** test interaction/export with demo, improve the empty-state layout and design authorized least-privilege audit retrieval (never elevate the GUI).
+
 ## Future integration tests
 
 Use synthetic audit streams; never commit personal raw logs. Add tests for serial correlation, PATH/PROCTITLE association, duplicate records, truncated lines, adversarial string content, huge output streams, cancellation, Polkit authorization denial and helper failure. Use isolated Fedora VM tests for privileged collector work; never mutate host SELinux policy as part of ordinary CI.
