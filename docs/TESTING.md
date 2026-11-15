@@ -65,6 +65,10 @@ Those manual checks covered the visible app and exported contents. File mode, at
 
 ## Future integration tests
 
+The uninstalled reader has a separate private-bus suite. On Fedora, install the standard Gio Python bindings and `dbus-run-session`, then use `make test-prototype`. The suite checks peer credential pinning, absent interaction flags, malformed calls, ineligible and denied callers, disconnect cancellation, concurrency, rate limits, evidence redaction and serialized D-Bus reply size. It uses synthetic evidence and simulated session and Polkit outcomes. The suite also passed in an isolated rootless Fedora 45 container.
+
+The enforcing KVM component probes exercised real D-Bus credentials, logind, Polkit decisions and `ausearch` with a synthetic file. They confirmed that the GNOME process belongs to a user-manager cgroup outside the active Wayland login's session scope. PID, pidfd and the inherited kernel audit session did not identify the active login in the observed run. The console probe exercised same-UID local and PAM-marked remote sessions, seat switching and termination, and real Polkit approval, interruption, cancellation, requester disconnect and timeout. The private-bus regression suite tests observed switch cancellation during simulated collection, unrelated session changes and rejection of retained grants. Candidate-service integration still requires a scoped service identity, activation, resource limits and confinement. [VM setup, observations and remaining tests](FEDORA_VM_VALIDATION.md)
+
 Use synthetic audit streams and keep personal raw logs out of fixtures. Correlation tests cover full audit identity, capture and node boundaries, duplicate and malformed lines, quoted field boundaries, incomplete PATH coverage, permissive records, UTC time, and the v1 report boundary. Add integration tests for Polkit authorization denial and helper failure in an isolated Fedora VM. Ordinary CI leaves host SELinux policy intact.
 
 ## Test claims
