@@ -19,7 +19,8 @@ Attacker-controlled paths, process names, audit fields, malformed log lines, loc
 
 ## Current safeguards
 
-- Fixed executable names/arguments, `shell=False`, subprocess timeout.
+- Fixed absolute executable paths and arguments, `shell=False`, closed stdin, and a fixed locale with no inherited environment variables.
+- Separate stdout and stderr capture limits, deadlines, and cancellation when the window closes. Failed, capped or cancelled queries do not expose partial output or child diagnostics. The byte limits apply to captured data in the parent. The child process retains the OS limits of the desktop session.
 - Strict record selection (AVC/USER_AVC and denial).
 - Missing/invalid fields shown as unknown, not invented.
 - No implicit policy writes or privilege escalation.
@@ -29,7 +30,6 @@ Attacker-controlled paths, process names, audit fields, malformed log lines, loc
 
 ## Current limitations / known risks
 
-- `subprocess.run(capture_output=True)` collects all output **before** the 2 MB size test. This is not an actual process-memory cap. Implement a bounded streaming reader and regression tests before claiming hard caps.
 - A user-chosen export path can overwrite an existing file through the regular GTK save dialog; the current implementation uses regular file writes, not hardened atomic writes.
 - Report redaction is partial: process names, PIDs, source/target contexts and the report notice remain. Do not publish raw/real reports without review.
 - AVC-only records can omit paths or be misleading without related audit records. Correlation is planned.

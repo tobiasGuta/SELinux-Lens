@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
+import os
 import re
+import selectors
+import signal
 import subprocess
 from datetime import datetime, timezone
+from threading import Event
+from time import monotonic
 from typing import Callable
 
 from .models import Denial, Snapshot
 
 MAX_OUTPUT_BYTES = 2_000_000
+MAX_ERROR_BYTES = 16_384
 MAX_EVENTS = 200
+_MODE_COMMAND = ["/usr/sbin/getenforce"]
+_AUDIT_COMMAND = [
+    "/usr/sbin/ausearch", "--input-logs", "-m", "AVC,USER_AVC", "-ts", "recent",
+]
+_READ_SIZE = 65_536
+_CANCEL_POLL = 0.1
 
 _AVC = re.compile(r"\btype=(?:AVC|USER_AVC)\b")
 _DENIED = re.compile(r"\bavc:\s+denied\s*\{([^}]*)\}", re.IGNORECASE)
@@ -76,73 +88,144 @@ def parse_ausearch(text: str, limit: int = MAX_EVENTS) -> tuple[Denial, ...]:
     return tuple(results[:limit])
 
 
+class CaptureLimitReached(Exception):
+    """A command produced more bytes than its stream budget."""
+
+
+class CollectionCancelled(Exception):
+    """The caller requested cancellation."""
+
+
 def _run(
     command: list[str],
-    timeout: int = 12,
-    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
-) -> subprocess.CompletedProcess[str]:
-    return runner(
+    *,
+    timeout: float,
+    output_limit: int,
+    error_limit: int,
+    cancel: Event | None = None,
+) -> subprocess.CompletedProcess[bytes]:
+    if cancel is not None and cancel.is_set():
+        raise CollectionCancelled
+    deadline = monotonic() + timeout
+    with subprocess.Popen(
         command,
-        capture_output=True,
-        text=True,
-        errors="replace",
-        timeout=timeout,
-        check=False,
-    )
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        shell=False,
+        env={"LC_ALL": "C"},
+        start_new_session=True,
+    ) as process:
+        stdout = bytearray()
+        stderr = bytearray()
+        completed = False
+        try:
+            with selectors.DefaultSelector() as selector:
+                selector.register(process.stdout, selectors.EVENT_READ, (stdout, output_limit))
+                selector.register(process.stderr, selectors.EVENT_READ, (stderr, error_limit))
+                while True:
+                    if cancel is not None and cancel.is_set():
+                        raise CollectionCancelled
+                    remaining = deadline - monotonic()
+                    if remaining <= 0:
+                        raise subprocess.TimeoutExpired(command, timeout)
+                    delay = min(remaining, _CANCEL_POLL) if cancel is not None else remaining
+                    if not selector.get_map():
+                        try:
+                            returncode = process.wait(timeout=delay)
+                        except subprocess.TimeoutExpired:
+                            continue
+                        completed = True
+                        return subprocess.CompletedProcess(
+                            command, returncode, bytes(stdout), bytes(stderr)
+                        )
+
+                    for key, _ in selector.select(delay):
+                        buffer, limit = key.data
+                        available = limit - len(buffer)
+                        chunk = os.read(key.fd, min(_READ_SIZE, available + 1))
+                        if len(chunk) > available:
+                            raise CaptureLimitReached
+                        if chunk:
+                            buffer.extend(chunk)
+                        else:
+                            selector.unregister(key.fileobj)
+        finally:
+            if not completed:
+                try:
+                    # Signal the group before reaping its leader, even if a
+                    # descendant is the only process still holding a pipe open.
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait()
 
 
 def selinux_mode(
-    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    runner: Callable[..., subprocess.CompletedProcess[bytes]] = _run,
+    *,
+    cancel: Event | None = None,
 ) -> str:
     try:
-        result = _run(["getenforce"], timeout=3, runner=runner)
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        result = runner(
+            _MODE_COMMAND, timeout=3, output_limit=1024, error_limit=1024, cancel=cancel
+        )
+    except (OSError, subprocess.TimeoutExpired, CaptureLimitReached):
         return "Unknown"
     if result.returncode != 0:
         return "Unknown"
     mode = result.stdout.strip().capitalize()
-    return mode if mode in {"Enforcing", "Permissive", "Disabled"} else "Unknown"
+    return {b"Enforcing": "Enforcing", b"Permissive": "Permissive", b"Disabled": "Disabled"}.get(
+        mode, "Unknown"
+    )
 
 
 def load_recent(
-    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    runner: Callable[..., subprocess.CompletedProcess[bytes]] = _run,
+    *,
+    cancel: Event | None = None,
 ) -> Snapshot:
     """Read the last ~10 minutes of ausearch AVCs; never elevate privileges."""
-    mode = selinux_mode(runner=runner)
+    mode = "Unknown"
     try:
-        result = _run(
-            ["ausearch", "-m", "AVC,USER_AVC", "-ts", "recent"],
-            runner=runner,
+        mode = selinux_mode(runner=runner, cancel=cancel)
+        result = runner(
+            _AUDIT_COMMAND, timeout=12, output_limit=MAX_OUTPUT_BYTES,
+            error_limit=MAX_ERROR_BYTES, cancel=cancel,
         )
+    except CollectionCancelled:
+        return Snapshot(mode, (), "ausearch", "Audit query cancelled.")
     except FileNotFoundError:
         return Snapshot(
             mode, (), "ausearch",
             "ausearch is unavailable. Install audit and retry, or use Demo mode.",
         )
+    except PermissionError:
+        return Snapshot(mode, (), "ausearch", "Audit access was denied.")
     except subprocess.TimeoutExpired:
         return Snapshot(mode, (), "ausearch", "Audit query timed out.")
-    except OSError as exc:
-        return Snapshot(mode, (), "ausearch", f"Cannot start ausearch: {exc}")
-
-    output = result.stdout or ""
-    error = (result.stderr or "").strip()
-    if len(output.encode("utf-8", errors="replace")) > MAX_OUTPUT_BYTES:
+    except CaptureLimitReached:
         return Snapshot(
             mode, (), "ausearch",
-            "Audit output exceeded the 2 MB safety limit. Narrow the time window.",
+            "Audit query exceeded its output safety limit. No records were loaded.",
         )
+    except OSError:
+        return Snapshot(mode, (), "ausearch", "Could not run the audit query.")
+
     if result.returncode != 0:
-        lower = error.lower()
-        if any(term in lower for term in ("permission", "denied", "must be root", "not authorized")):
+        error = result.stderr.strip().lower()
+        if any(term in error for term in (
+            b"permission denied", b"operation not permitted", b"must be root", b"not authorized"
+        )):
             return Snapshot(
                 mode, (), "ausearch",
                 "Audit access was denied. The GUI does not use sudo; see docs/SECURITY.md.",
             )
-        if result.returncode == 1 and not error:
+        if result.returncode == 1 and not result.stdout and error == b"<no matches>":
             return Snapshot(mode, (), "ausearch", "No AVC denials in the recent audit window.")
-        return Snapshot(mode, (), "ausearch", f"Audit query failed: {error[:300] or 'unknown error'}")
+        return Snapshot(mode, (), "ausearch", f"Audit query failed (exit {result.returncode}).")
 
-    events = parse_ausearch(output)
+    events = parse_ausearch(result.stdout.decode("utf-8", errors="replace"))
     notice = (
         f"Showing the newest {MAX_EVENTS} denials from the recent audit window."
         if len(events) == MAX_EVENTS

@@ -14,8 +14,8 @@ The roadmap is a plan, **not a list of implemented features**. Prioritize safety
 
 ## v0.1.1 — Production-quality input boundary
 
-- Replace post-capture truncation with **bounded streaming** stdout/stderr collection, process deadline, resource limits and clean cancellation; test high-volume/hostile outputs.
-- Validate output encoding and control characters; cap individual line length and UI rendering cost.
+- Bounded streaming stdout/stderr capture, subprocess deadlines, cancellation on window close and high-volume regression tests are implemented.
+- Display invalid UTF-8 with replacement characters. Escape untrusted control characters and cap individual line length and UI rendering cost.
 - Tighten unknown mode, ausearch exit-code and stderr/no-record classification on Fedora.
 - Improve export redaction (contexts, commands, paths, optional field selection), atomic write, overwrite confirmation and metadata minimization.
 - Add deterministic corpus of SELinux AVC shapes (host variations, malformed, duplicate, permissive, missing fields); protect against false interpretations.

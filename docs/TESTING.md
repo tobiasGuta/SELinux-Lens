@@ -9,7 +9,7 @@ PYTHONPATH=src python3 -m selinux_lens --help
 PYTHONPATH=src python3 -m selinux_lens --version
 ```
 
-Unit tests exercise AVC parsing, record ordering, permissive semantics, dependency injection, missing commands, permission denial, post-capture size rejection, export redaction and deterministic explanations. Core modules intentionally import no GTK.
+Unit tests exercise AVC parsing, record ordering, permissive semantics, missing commands, permission denial, explicit no matches, redaction and deterministic explanations. Synthetic subprocesses exercise independent stdout and stderr limits, exit status, hanging children, cancellation, and child reaping. Invalid UTF-8 and private error text are covered by collection tests. Core modules intentionally import no GTK.
 
 GitHub Actions runs compile/tests on Python 3.11 and 3.13. Passing these checks **does not validate runtime GTK compatibility, SELinux policy behavior, audit access or safe use on a live workstation**.
 
@@ -34,9 +34,11 @@ GitHub Actions runs compile/tests on Python 3.11 and 3.13. Passing these checks 
 - **Not verified:** search/filter interaction, JSON export, all GTK dialog behavior, accessibility, actual populated privileged audit data in GUI, complete Fedora/package version matrix.
 - **Follow-up:** test interaction/export with demo, improve the empty-state layout and design authorized least-privilege audit retrieval (never elevate the GUI).
 
+The bounded collector was exercised in the Fedora 45 GNOME Wayland session with SELinux enforcing. Demo loaded three records, and live mode showed explicit audit permission denial with zero rows. Closing the live window while a synthetic audit command was asleep cancelled the query and reaped the child. A populated host audit query was unavailable to the desktop account.
+
 ## Future integration tests
 
-Use synthetic audit streams; never commit personal raw logs. Add tests for serial correlation, PATH/PROCTITLE association, duplicate records, truncated lines, adversarial string content, huge output streams, cancellation, Polkit authorization denial and helper failure. Use isolated Fedora VM tests for privileged collector work; never mutate host SELinux policy as part of ordinary CI.
+Use synthetic audit streams and keep personal raw logs out of fixtures. Add tests for serial correlation, PATH/PROCTITLE association, duplicate records, truncated lines, control characters, Polkit authorization denial and helper failure. Use isolated Fedora VM tests for privileged collector work. Ordinary CI leaves host SELinux policy intact.
 
 ## Test claims
 

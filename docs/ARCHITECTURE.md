@@ -31,7 +31,9 @@ Report schema: `selinux-lens-report/v1` (see REPORT_FORMAT.md).
 
 ## Collection assumptions and known limitations
 
-Current command: `ausearch -m AVC,USER_AVC -ts recent`. No shell and no sudo. Parsed lines must have a type marker, `avc: denied { ... }` and a `msg=audit(epoch:serial)` identity. Adjacent SYSCALL/PATH/PROCTITLE messages and multi-record correlations are not implemented. Old events outside the 'recent' window are not shown; audit configuration and policy may affect record availability. 200 results returned at most, sorted newest first. Fixed 12-second subprocess timeout. Post-capture 2 MB output rejection protects downstream parsing but does **not** enforce a hard RAM or pipe limit before capture: fix early in next milestone.
+The collector runs `ausearch --input-logs -m AVC,USER_AVC -ts recent` without a shell or sudo. Parsed lines must have a type marker, `avc: denied { ... }` and a `msg=audit(epoch:serial)` identity. Adjacent SYSCALL/PATH/PROCTITLE messages and multi-record correlations are not implemented. Older events are outside the query window, and audit configuration and policy may affect record availability. The parser returns up to 200 results, sorted newest first.
+
+Binary stdout and stderr are drained concurrently with caps of 2 MB and 16 KiB, respectively, and a 12-second audit deadline. A cap, deadline or window close discards any partial output and terminates and reaps the collector process. The independent mode command has a three-second deadline and 1 KiB per stream. Successful audit output is decoded as UTF-8 with replacement for invalid bytes. Audit tool diagnostics are classified locally, and only the resulting status goes to the UI and report.
 
 ## Planned extension points
 

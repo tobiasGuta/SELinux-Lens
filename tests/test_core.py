@@ -6,7 +6,7 @@ import json
 import subprocess
 import unittest
 
-from selinux_lens.audit import MAX_OUTPUT_BYTES, load_recent, parse_ausearch, selinux_mode
+from selinux_lens.audit import load_recent, parse_ausearch, selinux_mode
 from selinux_lens.demo import demo_snapshot
 from selinux_lens.explain import interpret
 from selinux_lens.models import Snapshot
@@ -65,10 +65,10 @@ class ParseTests(unittest.TestCase):
 class CollectionTests(unittest.TestCase):
     @staticmethod
     def fake_run(args, **_kwargs):
-        if args == ["getenforce"]:
-            return subprocess.CompletedProcess(args, 0, stdout="Enforcing\n", stderr="")
-        if args == ["ausearch", "-m", "AVC,USER_AVC", "-ts", "recent"]:
-            return subprocess.CompletedProcess(args, 0, stdout=AVC, stderr="")
+        if args == ["/usr/sbin/getenforce"]:
+            return subprocess.CompletedProcess(args, 0, stdout=b"Enforcing\n", stderr=b"")
+        if args == ["/usr/sbin/ausearch", "--input-logs", "-m", "AVC,USER_AVC", "-ts", "recent"]:
+            return subprocess.CompletedProcess(args, 0, stdout=AVC.encode(), stderr=b"")
         raise AssertionError(f"Unexpected command: {args}")
 
     def test_runs_fixed_commands_and_loads_event(self):
@@ -77,19 +77,40 @@ class CollectionTests(unittest.TestCase):
         self.assertEqual(len(snap.events), 1)
         self.assertEqual(snap.source, "ausearch")
 
+    def load_result(self, returncode, stdout=b"", stderr=b""):
+        def runner(args, **kwargs):
+            if args[0] == "/usr/sbin/getenforce":
+                return self.fake_run(args, **kwargs)
+            return subprocess.CompletedProcess(args, returncode, stdout, stderr)
+        return load_recent(runner=runner)
+
     def test_permission_denied_is_not_silent(self):
-        def runner(args, **_kwargs):
-            if args[0] == "getenforce":
-                return subprocess.CompletedProcess(args, 0, "Enforcing", "")
-            return subprocess.CompletedProcess(args, 1, "", "Permission denied")
-        snap = load_recent(runner=runner)
+        snap = self.load_result(1, stderr=b"Permission denied")
         self.assertEqual(snap.events, ())
         self.assertIn("access was denied", snap.notice)
 
+    def test_ausearch_no_matches_is_distinct_from_a_failed_query(self):
+        self.assertIn("No AVC denials", self.load_result(1, stderr=b"<no matches>\n").notice)
+        self.assertIn("query failed", self.load_result(1).notice)
+        self.assertIn(
+            "query failed", self.load_result(1, stderr=b"Read error\n<no matches>\n").notice
+        )
+
+    def test_failure_does_not_publish_partial_output_or_raw_diagnostics(self):
+        snap = self.load_result(2, stdout=AVC.encode(), stderr=b"/private/diagnostic")
+        self.assertEqual(snap.events, ())
+        self.assertEqual(snap.notice, "Audit query failed (exit 2).")
+        self.assertNotIn("/private", serialize_report(snap))
+
+    def test_invalid_utf8_is_replaced_without_hiding_event(self):
+        payload = AVC.encode().replace(b"secret.txt", b"example-\xff.txt")
+        event, = self.load_result(0, stdout=payload).events
+        self.assertEqual(event.target, "example-\ufffd.txt")
+
     def test_missing_ausearch(self):
-        def runner(args, **_kwargs):
-            if args[0] == "getenforce":
-                return subprocess.CompletedProcess(args, 0, "Enforcing", "")
+        def runner(args, **kwargs):
+            if args[0] == "/usr/sbin/getenforce":
+                return self.fake_run(args, **kwargs)
             raise FileNotFoundError()
         snap = load_recent(runner=runner)
         self.assertIn("unavailable", snap.notice)
@@ -98,14 +119,6 @@ class CollectionTests(unittest.TestCase):
         def runner(*_args, **_kwargs):
             raise FileNotFoundError()
         self.assertEqual(selinux_mode(runner=runner), "Unknown")
-
-    def test_output_limit(self):
-        def runner(args, **_kwargs):
-            if args[0] == "getenforce":
-                return subprocess.CompletedProcess(args, 0, "Enforcing", "")
-            return subprocess.CompletedProcess(args, 0, "x" * (MAX_OUTPUT_BYTES + 1), "")
-        snap = load_recent(runner=runner)
-        self.assertIn("safety limit", snap.notice)
 
 
 class ReportTests(unittest.TestCase):
