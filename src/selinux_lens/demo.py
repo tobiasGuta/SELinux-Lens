@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from time import time
 
 from .audit import parse_ausearch
@@ -11,14 +10,18 @@ from .models import Snapshot
 
 def demo_snapshot() -> Snapshot:
     now = time()
+    file_access = f"msg=audit({now-12:.3f}:101):"
     lines = [
         (
-            f'type=AVC msg=audit({now-12:.3f}:101): avc:  denied  {{ read }} for '
+            f'type=AVC {file_access} avc:  denied  {{ read }} for '
             'pid=1200 comm="httpd" name="notes.txt" dev="nvme0n1p3" '
             'scontext=system_u:system_r:httpd_t:s0 '
             'tcontext=unconfined_u:object_r:user_home_t:s0 '
             'tclass=file permissive=0'
         ),
+        f'type=SYSCALL {file_access} arch=c000003e syscall=257 items=2 pid=1200',
+        f'type=PATH {file_access} item=0 name="/fictional/notes.txt"',
+        f'type=PROCTITLE {file_access} proctitle=6874747064',
         (
             f'type=AVC msg=audit({now-45:.3f}:102): avc: denied {{ write }} for '
             'pid=2300 comm="container-app" name="shared-data" '

@@ -15,7 +15,7 @@ The roadmap is a plan, **not a list of implemented features**. Prioritize safety
 ## v0.1.1 — Production-quality input boundary
 
 - Bounded streaming stdout/stderr capture, subprocess deadlines, cancellation on window close and high-volume regression tests are implemented.
-- Display invalid UTF-8 with replacement characters. Escape untrusted control characters and cap individual line length and UI rendering cost.
+- Display invalid UTF-8 with replacement characters. Audit lines and previews have length limits and the preview escapes untrusted control characters.
 - Tighten unknown mode, ausearch exit-code and stderr/no-record classification on Fedora.
 - Improve export redaction (contexts, commands, paths, optional field selection), atomic write, overwrite confirmation and metadata minimization.
 - Add deterministic corpus of SELinux AVC shapes (host variations, malformed, duplicate, permissive, missing fields); protect against false interpretations.
@@ -25,7 +25,7 @@ The roadmap is a plan, **not a list of implemented features**. Prioritize safety
 Compare system-supported sources and review a minimal, read-only interface before implementing privileged access. [Authorized audit access proposal](AUDIT_ACCESS.md)
 
 - Design a minimal audited **read-only** privileged data source (Polkit if truly necessary); no root GUI.
-- Correlate same-serial AVC/SYSCALL/PATH/PROCTITLE, explicit evidence provenance and incomplete-record handling.
+- Correlate AVC/SYSCALL/PATH/PROCTITLE within one capture by node and full audit ID, with line provenance and explicit missing records and items. Grouping denials in the event list remains open.
 - Separate 'no events', 'no permission', 'SELinux disabled', 'audit disabled', 'collection timed out', 'partial evidence'.
 - Add time-window controls, pagination, grouping and testable domain models.
 - Validate on Fedora GNOME versions with SELinux enforcing.

@@ -1,6 +1,6 @@
 # JSON report format: selinux-lens-report/v1
 
-`report.serialize_report(snapshot)` writes indented UTF-8 JSON with a trailing newline. GUI export calls this with `include_paths=False`.
+`report.serialize_report(snapshot)` writes indented UTF-8 JSON with a trailing newline. GUI export calls this with `include_paths=False`. Related audit records and their provenance are available in the local detail pane. V1 continues to export individual AVC observations and omits those companion records.
 
 ## Top-level fields
 

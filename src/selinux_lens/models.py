@@ -4,6 +4,23 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True, slots=True)
+class RelatedAuditRecord:
+    kind: str
+    line_number: int
+    raw: str = field(repr=False)
+    path_item: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AuditEvidence:
+    node: str | None
+    epoch: str
+    line_number: int
+    related: tuple[RelatedAuditRecord, ...]
+    expected_paths: int | None
+
+
+@dataclass(frozen=True, slots=True)
 class Denial:
     event_id: str
     timestamp_utc: str
@@ -16,6 +33,7 @@ class Denial:
     pid: str = ""
     permissive: bool | None = None
     raw: str = field(default="", repr=False)
+    evidence: AuditEvidence | None = field(default=None, repr=False, compare=False)
 
     @property
     def source_type(self) -> str:

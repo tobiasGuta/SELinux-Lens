@@ -51,11 +51,11 @@ These tests run without GTK. GUI smoke tests must currently be performed on a Fe
 
 An audit AVC with `permissive=0` reports a denied operation. An event with `permissive=1` records a policy denial that may have been **allowed** due to permissive operation. Missing `permissive` information is explicitly unknown. Neither case alone establishes a misconfiguration, an attack, a vulnerability, or the complete cause of a service failure.
 
-The UI shows **only recent AVC/USER_AVC records** from the command output; it does not correlate companion `SYSCALL`, `PATH`, or `PROCTITLE` records in v0.1, automatically identify the expected policy, or inspect the local policy database. Target names may be absent or partial. Avoid assuming the event list represents every SELinux decision.
+The event list shows recent AVC/USER_AVC denials. The detail pane can preview related `SYSCALL`, `PATH`, and `PROCTITLE` records from the same capture and the same full audit identity. It identifies missing records where possible. The AVC command, contexts, and target still come from that individual denial. Audit coverage can be incomplete.
 
 ### Export & privacy
 
-The app stores records in memory during the session and does not run a background collector. Export is user-triggered, writes a local JSON report, redacts the target name/path field by default, and omits raw audit lines. **Other fields such as process name, PID, and security contexts remain present** and may reveal sensitive system details: inspect reports before sharing. The Python API offers an explicit `include_paths=True` option for trusted, local workflows, but the GUI does not expose this option in v0.1.
+The app stores records in memory during the session and does not run a background collector. Export is user-triggered, writes a local JSON report, redacts the target name/path field by default, and omits raw audit lines and related records. **Other fields such as process name, PID, and security contexts remain present** and may reveal sensitive system details: inspect reports before sharing. The Python API offers an explicit `include_paths=True` option for trusted, local workflows, but the GUI does not expose this option in v0.1.
 
 ### Project documentation for contributors and Codex
 
@@ -81,6 +81,6 @@ The app stores records in memory during the session and does not run a backgroun
 
 ## Status and limitations
 
-This is an early development preview, **not a production-ready security control**. Audit access depends on user privileges and host policy; the initial GUI has no authenticated helper. No RPM, background events, full audit-event correlation, authoritative SELinux policy analysis, or automated remediation exists yet. The collector bounds audit stdout to 2 MB and stderr to 16 KiB while reading. Report redaction is partial.
+This is an early development preview, **not a production-ready security control**. Audit access depends on user privileges and host policy; the initial GUI has no authenticated helper. RPM packaging, background events, authoritative SELinux policy analysis, and automated remediation remain outside this preview. The collector bounds audit stdout to 2 MB and stderr to 16 KiB while reading. Report redaction is partial.
 
 Licensed under MIT. Contributions should follow [AGENTS.md](AGENTS.md) and [docs/SECURITY.md](docs/SECURITY.md).
