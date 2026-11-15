@@ -4,7 +4,7 @@
 
 SELinux Lens is a read-only, native Fedora GNOME app for investigating SELinux AVC / USER_AVC audit events. It uses GTK4 + Libadwaita, calls established Linux audit utilities, and distinguishes **observed audit facts** from **possible explanations**. It is not a policy editor or a vulnerability scanner.
 
-**Current version: v0.1.0 (development preview).** Fedora desktop integration is not yet hardware-tested. The project deliberately has no privileged GUI, automatic SELinux policy modifications, or background service.
+**Current version: v0.1.0 (development preview).** See the [Fedora 45 GNOME smoke test](docs/TESTING.md#fedora-gnome-smoke-test) for validated flows and outstanding checks. The project deliberately has no privileged GUI, automatic SELinux policy modifications, or background service.
 
 ## v0.1: implemented
 

@@ -9,7 +9,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gio, GLib, Gtk, Pango  # noqa: E402
 
 from . import __version__
 from .audit import load_recent
@@ -23,6 +23,7 @@ def label(text: str = "", *, style: str = "", selectable: bool = False) -> Gtk.L
     widget = Gtk.Label(label=text)
     widget.set_xalign(0)
     widget.set_wrap(True)
+    widget.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
     widget.set_selectable(selectable)
     if style:
         widget.add_css_class(style)
@@ -41,6 +42,7 @@ class LensWindow(Adw.ApplicationWindow):
         self._busy = False
         self._snapshot = Snapshot("Unknown", (), "ausearch")
         self._visible: list[Denial] = []
+        self._export_dialog: Gtk.FileChooserNative | None = None
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
@@ -282,11 +284,15 @@ class LensWindow(Adw.ApplicationWindow):
         self.raw_label.set_text(event.raw)
 
     def _export_clicked(self, _button: Gtk.Button) -> None:
+        if self._export_dialog is not None:
+            return
         dialog = Gtk.FileChooserNative.new(
             "Export SELinux Lens report", self,
             Gtk.FileChooserAction.SAVE, "Save", "Cancel"
         )
+        dialog.set_modal(True)
         dialog.set_current_name("selinux-lens-report.json")
+        self._export_dialog = dialog
 
         def response(chooser: Gtk.FileChooserNative, result: int) -> None:
             try:
@@ -306,6 +312,7 @@ class LensWindow(Adw.ApplicationWindow):
             except OSError as exc:
                 self.notice_label.set_text(f"Export failed: {exc}")
             finally:
+                self._export_dialog = None
                 chooser.destroy()
 
         dialog.connect("response", response)
@@ -315,7 +322,10 @@ class LensWindow(Adw.ApplicationWindow):
 class LensApplication(Adw.Application):
     def __init__(self, *, demo: bool) -> None:
         super().__init__(
-            application_id="io.github.tobiasguta.SELinuxLens",
+            application_id=(
+                "io.github.tobiasguta.SELinuxLens.Demo" if demo
+                else "io.github.tobiasguta.SELinuxLens"
+            ),
             flags=Gio.ApplicationFlags.DEFAULT_FLAGS,
         )
         self.demo = demo
