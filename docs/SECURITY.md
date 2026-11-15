@@ -40,6 +40,8 @@ Attacker-controlled paths, process names, audit fields, malformed log lines, loc
 
 See the [authorized audit access proposal](AUDIT_ACCESS.md) for the comparison of Fedora sources, proposed Polkit contract, disclosure limits, and review tests.
 
+The draft treats direct logind membership and administrator consent as independent requirements. D-Bus peer credentials pin a process identity. A Polkit challenge or UID display-session fallback cannot attest the origin of a request within a particular active local seat session. Hold the original session binding through authorization and collection. Concurrent same-UID sessions, loss of eligibility, bus disconnect, logind restart and descriptor delegation are explicit review cases. Keep any artifact handoff under the administrator's deliberate control and retain a clear source label in the unprivileged application. [VM observations and remaining validation](FEDORA_VM_VALIDATION.md)
+
 Do not accept arbitrary commands or paths from the UI. Expose a minimal, versioned, read-only D-Bus contract; authorize the caller with Polkit only for explicit narrowly scoped requests; avoid shell, env inheritance and writable code paths; cap request length, output count, time, memory and rate; privilege-drop where possible; defend against race conditions, symlink traversal and caller impersonation. Log sensitive access without leaking records. Prefer established system-supported audit access where it can satisfy least privilege. Threat-model and test before enabling by default.
 
 ## Safe remediation philosophy

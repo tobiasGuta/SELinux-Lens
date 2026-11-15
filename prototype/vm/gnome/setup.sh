@@ -3,6 +3,7 @@ exec > /dev/ttyS0 2>&1
 test "$(systemd-detect-virt --vm)" = kvm
 test "$(getenforce)" = Enforcing
 grep -Fq 'root=live:CDLABEL=Fedora-WS-Live-45' /proc/cmdline
+rpm -q fedora-release-workstation gnome-shell gnome-session systemd polkit dbus-broker
 test ! -e /usr/share/polkit-1/actions/io.github.tobiasguta.SELinuxLens.read-recent-avcs.policy
 test ! -e /etc/xdg/autostart/selinux-lens-probe.desktop
 install -m 0644 /mnt/action.policy /usr/share/polkit-1/actions/io.github.tobiasguta.SELinuxLens.read-recent-avcs.policy

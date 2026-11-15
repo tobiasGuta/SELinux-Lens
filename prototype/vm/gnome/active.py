@@ -1,4 +1,6 @@
+import ctypes
 import os
+import sys
 import threading
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -6,9 +8,57 @@ from uuid import uuid4
 
 from gi.repository import Gio, GLib
 
+
+def inspect_process(bus):
+    cgroup = Path("/proc/self/cgroup").read_text().strip()
+    print("GNOME caller cgroup:", cgroup)
+    print("GNOME caller kernel audit session:", Path("/proc/self/sessionid").read_text().strip())
+    libsystemd = ctypes.CDLL("libsystemd.so.0")
+    lookup = libsystemd.sd_pidfd_get_session
+    lookup.argtypes = (ctypes.c_int, ctypes.POINTER(ctypes.c_char_p))
+    result = ctypes.c_char_p()
+    fd = os.pidfd_open(os.getpid())
+    try:
+        status = lookup(fd, ctypes.byref(result))
+        print("GNOME caller pidfd session:", result.value.decode() if status >= 0
+              else os.strerror(-status))
+        if status >= 0:
+            ctypes.CDLL("libc.so.6").free(result)
+    finally:
+        os.close(fd)
+    sessions, = bus.call_sync(
+        "org.freedesktop.login1", "/org/freedesktop/login1", "org.freedesktop.login1.Manager",
+        "ListSessions", None, GLib.VariantType.new("(a(susso))"),
+        Gio.DBusCallFlags.NONE, 2500, None,
+    ).unpack()
+    for session_id, uid, _, seat, path in sessions:
+        if uid != os.getuid():
+            continue
+        props, = bus.call_sync(
+            "org.freedesktop.login1", path, "org.freedesktop.DBus.Properties", "GetAll",
+            GLib.Variant("(s)", ("org.freedesktop.login1.Session",)),
+            GLib.VariantType.new("(a{sv})"), Gio.DBusCallFlags.NONE, 2500, None,
+        ).unpack()
+        if props["Class"] == "user":
+            print("GNOME caller same-UID session:", session_id, seat,
+                  {k: props.get(k) for k in ("Scope", "Active", "Remote", "Type", "Service", "Audit")})
+
+
 def check():
     assert os.getuid() != 0
     bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+    inspect_process(bus)
+    from prototype.audit_reader import SystemAuthorization
+
+    auth = SystemAuthorization(bus)
+    peer = auth.peer(bus.get_unique_name())
+    assert peer is not None and peer.pid == os.getpid() and peer.uid == os.getuid()
+    try:
+        binding = auth.binding(peer)
+    finally:
+        os.close(peer.process_fd)
+    print("GNOME caller reader binding:", binding)
+    assert binding is None, "GNOME user-manager fixture unexpectedly has a session binding"
     name = bus.get_unique_name()
     try:
         path, = bus.call_sync(
@@ -68,6 +118,7 @@ def check():
     assert state[0] != "unexpected approval"
 
 
+sys.path.insert(0, "/mnt/code")
 with Path("/tmp/selinux-lens-gnome-result.txt").open("x") as output, redirect_stdout(output):
     try:
         check()

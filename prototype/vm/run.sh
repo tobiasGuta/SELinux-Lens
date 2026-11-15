@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# != 2 || ( "$1" != baseline && "$1" != gnome ) ]]; then
-    printf 'Usage: bash prototype/vm/run.sh {baseline|gnome} DOWNLOADED_MEDIA_DIRECTORY\n' >&2
+if [[ $# != 2 || ( "$1" != baseline && "$1" != gnome && "$1" != sessions ) ]]; then
+    printf 'Usage: bash prototype/vm/run.sh {baseline|gnome|sessions} DOWNLOADED_MEDIA_DIRECTORY\n' >&2
     exit 2
 fi
 if [[ $EUID == 0 || ! -r /dev/kvm || ! -w /dev/kvm ]]; then
@@ -17,7 +17,15 @@ iso=Fedora-Workstation-Live-45-1.4.x86_64.iso
 checksums=Fedora-Workstation-45-1.4-x86_64-CHECKSUM
 action=io.github.tobiasguta.SELinuxLens.read-recent-avcs.policy
 work=$(mktemp -d)
-printf 'VM logs and temporary media: %s\n' "$work"
+printf 'VM logs: %s\n' "$work"
+cleanup() {
+    for temporary in vmlinuz initrd.img probe.iso; do
+        if [[ -f "$work/$temporary" ]]; then
+            unlink -- "$work/$temporary"
+        fi
+    done
+}
+trap cleanup EXIT
 
 test -r "$media/$iso"
 signature=$(gpgv --status-fd 1 --keyring "$media/fedora.gpg" \
@@ -26,7 +34,21 @@ grep -Fq '[GNUPG:] VALIDSIG 4F50A6114CD5C6976A7F1179655A4B02F577861E ' <<<"$sign
 (cd -- "$media" && sha256sum --check --ignore-missing "$work/checksums")
 
 mkdir "$work/guest"
-cp -- "$scripts/$mode/"* "$work/guest/"
+case "$mode" in
+    baseline) files=(probe.py probe.sh) ;;
+    gnome) files=(active.py gnome-probe.desktop setup.sh watch.sh) ;;
+    sessions) files=(authorization.py matrix.py probe.py probe.sh) ;;
+esac
+for file in "${files[@]}"; do
+    cp -- "$scripts/$mode/$file" "$work/guest/"
+done
+if [[ $mode == sessions || $mode == gnome ]]; then
+    mkdir -p "$work/guest/code/"{selinux_lens,prototype}
+    for module in __init__.py audit.py models.py; do
+        cp -- "$scripts/../../src/selinux_lens/$module" "$work/guest/code/selinux_lens/"
+    done
+    cp -- "$scripts/../audit_reader.py" "$work/guest/code/prototype/"
+fi
 cp -- "$scripts/../$action" "$work/guest/action.policy"
 xorriso -osirrox on -indev "$media/$iso" \
     -extract /boot/x86_64/loader/linux "$work/vmlinuz" \
@@ -34,7 +56,7 @@ xorriso -osirrox on -indev "$media/$iso" \
 xorriso -as mkisofs -quiet -R -V LENS_VM_PROBE -o "$work/probe.iso" "$work/guest"
 
 case "$mode" in
-    baseline) program=probe.sh; success=poweroff ;;
+    baseline|sessions) program=probe.sh; success=poweroff ;;
     gnome) program=setup.sh; success=none ;;
 esac
 boot='root=live:CDLABEL=Fedora-WS-Live-45 rd.live.image ro console=ttyS0,115200n8'
@@ -49,6 +71,10 @@ timeout --kill-after=5s 160 qemu-system-x86_64 -name selinux-lens-validation \
     -kernel "$work/vmlinuz" -initrd "$work/initrd.img" -append "$boot"
 
 case "$mode" in
+    sessions)
+        grep -E '^(SESSION CHECK|END SELINUX LENS SESSION MATRIX)' "$work/guest.log"
+        grep -q '^END SELINUX LENS SESSION MATRIX' "$work/guest.log"
+        ;;
     baseline)
         grep -E '^(PASS |END SELINUX LENS GUEST PROBE)' "$work/guest.log"
         grep -q '^END SELINUX LENS GUEST PROBE' "$work/guest.log"

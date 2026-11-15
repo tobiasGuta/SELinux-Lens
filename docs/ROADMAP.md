@@ -24,7 +24,7 @@ The roadmap is a plan, **not a list of implemented features**. Prioritize safety
 
 Compare system-supported sources and review a minimal, read-only interface before implementing privileged access. [Authorized audit access proposal](AUDIT_ACCESS.md)
 
-- Design a minimal audited **read-only** privileged data source (Polkit if truly necessary); no root GUI.
+- Direct desktop retrieval remains blocked on exact active-session identity and full service validation. Evaluate explicit administrator-approved artifact handoff first. [Authorization decision](AUDIT_ACCESS.md#caller-identity-findings-and-decision)
 - Correlate AVC/SYSCALL/PATH/PROCTITLE within one capture by node and full audit ID, with line provenance and explicit missing records and items. Grouping denials in the event list remains open.
 - The desktop displays focused empty, permission, error and incomplete states. Distinguishing a disabled audit source from other unavailable-source conditions remains open.
 - Add time-window controls, pagination, grouping and testable domain models.

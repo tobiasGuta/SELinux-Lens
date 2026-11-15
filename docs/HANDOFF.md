@@ -10,7 +10,7 @@ The initial v0.1 code implements a GTK4/Libadwaita inspection shell around read-
 2. Run `make test && make compile`.
 3. Finish physical keyboard, magnifier and portal-backed export testing on Fedora GNOME.
 4. Verify correlated records against an independently authorized populated Fedora audit query.
-5. Resolve the GNOME caller's logind session-mapping gap before integrating the draft reader. Then validate real authorization, resource limits, and a confined service identity in an isolated Fedora VM. [VM evidence and test matrix](FEDORA_VM_VALIDATION.md)
+5. Keep direct desktop audit retrieval blocked. Fedora GNOME user-manager processes have no direct logind session binding. Review an administrator-controlled snapshot handoff as the first alternative. [Authorization decision](AUDIT_ACCESS.md#caller-identity-findings-and-decision) · [VM evidence and test matrix](FEDORA_VM_VALIDATION.md)
 6. Verify the shareable v2 desktop export on different local filesystems. Keep the detailed v1 API compatible.
 7. Open PRs with evidence of actual testing rather than claiming an unverified app is production-ready.
 
@@ -36,6 +36,8 @@ These are **user-reported observations from screenshots and terminal output**, n
 ## v0.1.1 candidate observations
 
 The user reported a current checkout and 38 passing tests. On Fedora, the demo showed three records with incomplete PATH evidence, and normal mode showed **Audit access required** under enforcing SELinux with export disabled. An inspected shareable v2 demo report contained only the three permitted event fields. The observed workflow and remaining checks are recorded in the test guide. [User-observed validation](TESTING.md#user-observed-v011-candidate-check)
+
+The user later confirmed version 0.1.1, an up-to-date checkout, 41 passing core tests, successful demo launch, the normal audit-permission warning and the shareable v2 field set on Fedora.
 
 ## Minimal acceptance test for the next PR
 
