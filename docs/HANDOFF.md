@@ -10,7 +10,7 @@ The initial v0.1 code implements a GTK4/Libadwaita inspection shell around read-
 2. Run `make test && make compile`.
 3. Re-test `bash run.sh --demo` as a regular user, including search, filters, keyboard support and export; initial launch/render has been observed.
 4. Run `bash run.sh` as a regular user and improve its permission-denied empty state; ordinary-user denial has been observed.
-5. Continue input hardening with per-line limits and safe rendering of untrusted control characters.
+5. Verify correlated records against an independently authorized populated Fedora audit query.
 6. Review report redaction and export safety; treat both as security-critical.
 7. Open PRs with evidence of actual testing rather than claiming an unverified app is production-ready.
 
@@ -28,9 +28,9 @@ These are **user-reported observations from screenshots and terminal output**, n
 ## Known implementation gaps
 
 - Basic GTK rendering was observed in a user screenshot; file chooser and end-to-end export have not been verified.
-- The collector enforces stream budgets while reading and cancels on close. Individual audit lines still need a size limit and control-character handling.
-- Audit collection reads only recent AVC/USER_AVC and does not correlate companion records.
-- UI always displays raw AVC text locally; export redacts only target path/name, not all sensitive fields.
+- The collector enforces stream budgets while reading and cancels on close. Audit lines and previews have separate limits.
+- The UI correlates supported companion records within one capture and reports missing records and PATH items. Availability on live systems depends on the audit source.
+- The UI renders bounded AVC and companion previews locally. Export omits raw records and companion data. Export redaction covers the target path/name and other sensitive fields can remain.
 - No Polkit helper; ordinary Fedora user may see audit access denied.
 - No RPM, desktop metadata, icons, integration tests or full live timeline.
 

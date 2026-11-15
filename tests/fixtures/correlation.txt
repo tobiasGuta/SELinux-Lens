@@ -1,0 +1,16 @@
+----
+time->Tue Nov 14 15:13:20 2023
+node=alpha type=AVC msg=audit(1700000000.123:42): avc:  denied  { read } for pid=15 comm="demo-worker" tclass=file permissive=0
+node=alpha type=SYSCALL msg=audit(1700000000.123:42): arch=c000003e syscall=257 success=no exit=-13 items=3 pid=15 comm="fictional"
+node=alpha type=PATH msg=audit(1700000000.123:42): item=0 name="/fictional/first" inode=42
+node=alpha type=PATH msg=audit(1700000000.123:42): item=0 name="/fictional/first" inode=42
+node=alpha type=PATH msg=audit(1700000000.123:42): item=2 name="/fictional/last"
+node=alpha type=PATH msg=audit(1700000000.123:42): item=broken name="/fictional/malformed"
+node=alpha type=PROCTITLE msg=audit(1700000000.123:42): proctitle=66616B6500
+node=alpha type=PROCTITLE msg=audit(1700000000.123:42): proctitle=not-hex
+node=alpha type=PATH msg=audit(1700000000.123:43): item=1 name="/fictional/wrong-serial"
+node=alpha type=PATH msg=audit(1700000000.124:42): item=1 name="/fictional/wrong-time"
+node=beta type=PATH msg=audit(1700000000.123:42): item=1 name="/fictional/wrong-node"
+type=PATH msg=audit(1700000000.123:42): item=1 name="/fictional/untagged"
+type=USER_AVC msg=audit(1700000000.124:44): pid=16 uid=1000 msg='avc: denied { execute } for comm="demo-service" permissive=1'
+type=PATH msg=audit(1700000000.124:44): item=0 name="/fictional/path-only"

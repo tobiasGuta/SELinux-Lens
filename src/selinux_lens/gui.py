@@ -4,25 +4,61 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
+from unicodedata import category
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gio, GLib, Gtk, Pango  # noqa: E402
 
 from . import __version__
 from .audit import load_recent
 from .demo import demo_snapshot
 from .explain import interpret
-from .models import Denial, Snapshot
+from .models import AuditEvidence, Denial, Snapshot
 from .report import serialize_report
+
+_CONTROL_CATEGORIES = {"Cc", "Cf", "Cs", "Zl", "Zp"}
+_RELATED_PREVIEW_COUNT = 12
+
+
+def audit_preview(text: str, limit: int = 4096) -> str:
+    """Expose control characters and bound the amount of text GTK lays out."""
+    escaped = "".join(
+        (f"\\u{ord(char):04x}" if ord(char) <= 0xFFFF else f"\\U{ord(char):08x}")
+        if category(char) in _CONTROL_CATEGORIES else char
+        for char in text[:limit]
+    )
+    if len(text) > limit or len(escaped) > limit:
+        return escaped[:limit] + "… [preview shortened]"
+    return escaped
+
+
+def evidence_summary(event: Denial, evidence: AuditEvidence) -> str:
+    node = audit_preview(evidence.node, 128) if evidence.node else "not recorded"
+    lines = [
+        f"Audit ID {evidence.epoch}:{event.event_id} • Node {node}",
+        f"Denial record at output line {evidence.line_number}",
+    ]
+    kinds = {record.kind for record in evidence.related}
+    missing = [kind for kind in ("SYSCALL", "PATH", "PROCTITLE") if kind not in kinds]
+    if evidence.expected_paths == 0 and "PATH" in missing:
+        missing.remove("PATH")
+    if missing:
+        lines.append("Absent from this capture: " + ", ".join(missing))
+    if evidence.expected_paths is not None:
+        path_items = {record.path_item for record in evidence.related if record.kind == "PATH"}
+        present = sum(item is not None and item < evidence.expected_paths for item in path_items)
+        lines.append(f"PATH items observed: {present} of {evidence.expected_paths} reported by SYSCALL")
+    return "\n".join(lines)
 
 
 def label(text: str = "", *, style: str = "", selectable: bool = False) -> Gtk.Label:
     widget = Gtk.Label(label=text)
     widget.set_xalign(0)
     widget.set_wrap(True)
+    widget.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
     widget.set_selectable(selectable)
     if style:
         widget.add_css_class(style)
@@ -135,9 +171,19 @@ class LensWindow(Adw.ApplicationWindow):
         self.checks_label = label("", selectable=True)
         details.append(self.checks_label)
 
-        details.append(label("Original AVC record", style="heading"))
+        details.append(label("Original AVC record preview", style="heading"))
         self.raw_label = label("", style="monospace", selectable=True)
         details.append(self.raw_label)
+
+        self.evidence_box = column(8)
+        self.evidence_box.append(label("Related audit records", style="heading"))
+        self.evidence_summary = label("", selectable=True)
+        self.evidence_box.append(self.evidence_summary)
+        self.related_expander = Gtk.Expander(label="Show record previews")
+        self.related_records = label("", style="monospace", selectable=True)
+        self.related_expander.set_child(self.related_records)
+        self.evidence_box.append(self.related_expander)
+        details.append(self.evidence_box)
         details.append(label(
             "SELinux Lens never generates or applies policy changes. "
             "Correlate the complete audit event before drawing conclusions.",
@@ -227,7 +273,7 @@ class LensWindow(Adw.ApplicationWindow):
             body.set_margin_end(10)
             body.set_margin_top(9)
             body.set_margin_bottom(9)
-            body.append(label(event.headline, style="heading"))
+            body.append(label(audit_preview(event.headline, 160), style="heading"))
             body.append(label(
                 f"#{event.event_id} • {event.timestamp_utc} • "
                 + ("Permissive" if event.permissive is True else
@@ -255,23 +301,24 @@ class LensWindow(Adw.ApplicationWindow):
                 self.checks_label, self.raw_label,
             ):
                 widget.set_text("")
+            self._show_evidence(None)
             return
         index = row.get_index()
         if index < 0 or index >= len(self._visible):
             return
         event = self._visible[index]
         explanation = interpret(event)
-        self.details_title.set_text(event.headline)
+        self.details_title.set_text(audit_preview(event.headline, 512))
         self.details_meta.set_text(
             f"Audit serial {event.event_id} • UTC {event.timestamp_utc}"
-            + (f" • PID {event.pid}" if event.pid else "")
+            + (f" • PID {audit_preview(event.pid, 80)}" if event.pid else "")
         )
-        self.facts_label.set_text(explanation.observed)
+        self.facts_label.set_text(audit_preview(explanation.observed))
         self.context_label.set_text(
-            f"Source: {event.source_context or '(missing)'}\n"
-            f"Target: {event.target_context or '(missing)'}\n"
-            f"Object class: {event.target_class or '(missing)'}\n"
-            f"Target name/path: {event.target or '(not present in AVC)'}"
+            f"Source: {audit_preview(event.source_context or '(missing)', 1024)}\n"
+            f"Target: {audit_preview(event.target_context or '(missing)', 1024)}\n"
+            f"Object class: {audit_preview(event.target_class or '(missing)', 256)}\n"
+            f"Target name/path: {audit_preview(event.target or '(not present in AVC)', 1024)}"
         )
         self.hypotheses_label.set_text(
             "\n\n".join("• " + item for item in explanation.possible_explanations)
@@ -279,7 +326,28 @@ class LensWindow(Adw.ApplicationWindow):
         self.checks_label.set_text(
             "\n".join("• " + item for item in explanation.next_checks)
         )
-        self.raw_label.set_text(event.raw)
+        self.raw_label.set_text(audit_preview(event.raw))
+        self._show_evidence(event)
+
+    def _show_evidence(self, event: Denial | None) -> None:
+        evidence = event.evidence if event is not None else None
+        self.evidence_box.set_visible(evidence is not None)
+        if event is None or evidence is None:
+            self.evidence_summary.set_text("")
+            self.related_records.set_text("")
+            self.related_expander.set_expanded(False)
+            return
+        self.evidence_summary.set_text(evidence_summary(event, evidence))
+        self.related_expander.set_visible(bool(evidence.related))
+        self.related_expander.set_expanded(False)
+        previews = [
+            f"{record.kind} • Output line {record.line_number}\n{audit_preview(record.raw, 512)}"
+            for record in evidence.related[:_RELATED_PREVIEW_COUNT]
+        ]
+        omitted = len(evidence.related) - len(previews)
+        if omitted:
+            previews.append(f"{omitted} additional related records omitted from the preview.")
+        self.related_records.set_text("\n\n".join(previews))
 
     def _export_clicked(self, _button: Gtk.Button) -> None:
         dialog = Gtk.FileChooserNative.new(

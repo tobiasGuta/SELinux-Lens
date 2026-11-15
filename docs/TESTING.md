@@ -36,9 +36,11 @@ GitHub Actions runs compile/tests on Python 3.11 and 3.13. Passing these checks 
 
 The bounded collector was exercised in the Fedora 45 GNOME Wayland session with SELinux enforcing. Demo loaded three records, and live mode showed explicit audit permission denial with zero rows. Closing the live window while a synthetic audit command was asleep cancelled the query and reaped the child. A populated host audit query was unavailable to the desktop account.
 
+The correlation UI was exercised in the same session with the fictional demo and synthetic records. Checks covered output line provenance, incomplete PATH counts, permissive wording, keyboard focus traversal, an 8 KiB command with a bidi control, resizing, light and dark styles, and clearing evidence when search returns no rows. Fedora's `ausearch` also returned all three supported companion types from a synthetic audit file.
+
 ## Future integration tests
 
-Use synthetic audit streams and keep personal raw logs out of fixtures. Add tests for serial correlation, PATH/PROCTITLE association, duplicate records, truncated lines, control characters, Polkit authorization denial and helper failure. Use isolated Fedora VM tests for privileged collector work. Ordinary CI leaves host SELinux policy intact.
+Use synthetic audit streams and keep personal raw logs out of fixtures. Correlation tests cover full audit identity, capture and node boundaries, duplicate and malformed lines, quoted field boundaries, incomplete PATH coverage, permissive records, UTC time, and the v1 report boundary. Add integration tests for Polkit authorization denial and helper failure in an isolated Fedora VM. Ordinary CI leaves host SELinux policy intact.
 
 ## Test claims
 
