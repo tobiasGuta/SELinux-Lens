@@ -60,7 +60,6 @@ class LensWindow(Adw.ApplicationWindow):
         header.pack_end(self.export_button)
         toolbar.add_top_bar(header)
 
-        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.notice_label = label(
             "Reports redact target paths by default. All investigations remain in memory.",
             style="dim-label",
@@ -69,8 +68,8 @@ class LensWindow(Adw.ApplicationWindow):
         self.notice_label.set_margin_end(18)
         self.notice_label.set_margin_top(10)
         self.notice_label.set_margin_bottom(10)
-        outer.append(self.notice_label)
-        outer.append(Gtk.Separator())
+        toolbar.add_top_bar(self.notice_label)
+        toolbar.add_top_bar(Gtk.Separator())
 
         content = Gtk.Paned.new(Gtk.Orientation.HORIZONTAL)
         content.set_position(365)
@@ -152,8 +151,7 @@ class LensWindow(Adw.ApplicationWindow):
         content.set_end_child(right_scroll)
         content.set_resize_end_child(True)
         content.set_shrink_end_child(False)
-        outer.append(content)
-        toolbar.set_content(outer)
+        toolbar.set_content(content)
         self.set_content(toolbar)
         self._cancel_collection = threading.Event()
         self.connect("close-request", self._close_requested)
