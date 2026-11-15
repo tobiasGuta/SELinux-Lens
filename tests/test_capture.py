@@ -95,10 +95,10 @@ class BoundedCaptureTests(unittest.TestCase):
             (subprocess.TimeoutExpired(["ausearch"], 12), "timed out"),
             (CaptureLimitReached(), "safety limit"),
         ):
-            def runner(command, **_kwargs):
+            def runner(command, *, failure=problem, **_kwargs):
                 if command == ["/usr/sbin/getenforce"]:
                     return subprocess.CompletedProcess(command, 0, b"Enforcing", b"")
-                raise problem
+                raise failure
 
             with self.subTest(problem=problem):
                 snapshot = load_recent(runner=runner)

@@ -21,7 +21,7 @@ On 2026-11-15 the application ran in a Fedora Workstation 45 GNOME Wayland sessi
 - An 8 KiB unbroken synthetic value initially expanded the window to roughly 70,000 pixels wide. After enabling word/character wrapping, the test window resized to 820 × 540. Light and dark Libadwaita modes both activated.
 - `Gtk.FileChooserNative` save and cancel passed using GTK's in-process chooser backend. The saved v1 report had three redacted targets and omitted raw lines. An injected write error produced the visible export failure. The desktop portal chooser path was not verified.
 - Normal-mode collection showed `Enforcing`, explicit audit access denial, zero rows, and a disabled export button. `ausearch` returned permission denied for both its configuration and its audit log on this account.
-- GTK emitted a `GtkBox` minimum/natural width measurement warning. Physical keyboard and magnifier testing, portal-backed export, and comparison against real records with separately authorized audit access remain outstanding.
+- The initial run reproduced a GTK width measurement warning in the container around the notice and split view. Moving the notice and separator into the existing toolbar eliminated the warning in repeated search, resize, theme, and chooser checks. Physical keyboard and magnifier testing, portal-backed export, and comparison against real records with separately authorized audit access remain outstanding.
 
 ## Fedora GNOME manual checklist
 
