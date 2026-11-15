@@ -23,7 +23,7 @@ Layer separation prevents tests from requiring a graphical environment or privil
 
 `Denial`: audit serial (event_id), UTC timestamp, permissions, source/target contexts, target object class, command/name/PID, permissive value (true/false/unknown), raw AVC text. Context type parsing extracts field 3 from the colon-delimited context or returns `unknown`. Each denial optionally carries an `AuditEvidence` reference.
 
-`AuditEvidence`: node if recorded, exact audit epoch, the denial's one-based output line number, related `SYSCALL`, `PATH`, and `PROCTITLE` records with their own kinds and line numbers, and the number of PATH items if unambiguously reported by SYSCALL. Correlation uses the capture, node, exact epoch and serial. Line numbers refer to the captured tool output. A missing record or item describes coverage of that output. Any command and path shown as AVC fields still come from the denial record.
+`AuditEvidence`: node if recorded, exact audit epoch, the denial's one-based output line number, related `SYSCALL`, `PATH`, and `PROCTITLE` records with their own kinds and line numbers, and the number of PATH items if unambiguously reported by SYSCALL. Correlation uses the capture, node, exact epoch and serial. Line numbers refer to the captured tool output. A missing record or item describes the usable evidence parsed from that output. Any command and path shown as AVC fields still come from the denial record.
 
 `Snapshot`: SELinux mode, immutable tuple of Denial records, data source, user-visible diagnostic notice. The GUI stores the current Snapshot only in process memory.
 

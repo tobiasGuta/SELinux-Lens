@@ -46,7 +46,7 @@ def evidence_summary(event: Denial, evidence: AuditEvidence) -> str:
     if evidence.expected_paths == 0 and "PATH" in missing:
         missing.remove("PATH")
     if missing:
-        lines.append("Absent from this capture: " + ", ".join(missing))
+        lines.append("No usable records of these types: " + ", ".join(missing))
     if evidence.expected_paths is not None:
         path_items = {record.path_item for record in evidence.related if record.kind == "PATH"}
         present = sum(item is not None and item < evidence.expected_paths for item in path_items)
