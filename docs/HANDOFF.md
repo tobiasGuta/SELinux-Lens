@@ -10,7 +10,7 @@ The initial v0.1 code implements a GTK4/Libadwaita inspection shell around read-
 2. Run `make test && make compile`.
 3. Finish physical keyboard, magnifier and portal-backed export testing on Fedora GNOME.
 4. Verify correlated records against an independently authorized populated Fedora audit query.
-5. Review the authorized audit interface and validate real Polkit, peer eligibility and a confined service identity in an isolated Fedora VM. [Audit access design](AUDIT_ACCESS.md)
+5. Resolve the GNOME caller's logind session-mapping gap before integrating the draft reader. Then validate real authorization, resource limits, and a confined service identity in an isolated Fedora VM. [VM evidence and test matrix](FEDORA_VM_VALIDATION.md)
 6. Verify the shareable v2 desktop export on different local filesystems. Keep the detailed v1 API compatible.
 7. Open PRs with evidence of actual testing rather than claiming an unverified app is production-ready.
 

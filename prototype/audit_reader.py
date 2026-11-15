@@ -97,10 +97,15 @@ class SystemAuthorization:
         )
         if not owner:
             return False
-        path, = self._call(
-            LOGIN, LOGIN_PATH, LOGIN + ".Manager", "GetSessionByPID",
-            GLib.Variant("(u)", (peer.pid,)), "(o)",
-        )
+        try:
+            path, = self._call(
+                LOGIN, LOGIN_PATH, LOGIN + ".Manager", "GetSessionByPID",
+                GLib.Variant("(u)", (peer.pid,)), "(o)",
+            )
+        except GLib.Error as error:
+            if Gio.DBusError.get_remote_error(error) == LOGIN + ".NoSessionForPID":
+                return False
+            raise
         props, = self._call(
             LOGIN, path, "org.freedesktop.DBus.Properties", "GetAll",
             GLib.Variant("(s)", (LOGIN + ".Session",)), "(a{sv})",
@@ -180,10 +185,10 @@ def _collect(cancel: threading.Event) -> Outcome:
 
 def _reply(status: str, records: list[Record]) -> GLib.Variant:
     payload: list[Record] = []
-    size_budget = MAX_REPLY_BYTES - 128
+    size_budget = MAX_REPLY_BYTES - 512
     for record in records[:audit.MAX_EVENTS]:
-        # Reserve room for per-record framing beyond the six UTF-8 strings and byte.
-        size_budget -= sum(len(value.encode("utf-8")) for value in record[:-1]) + 32
+        # D-Bus adds length, alignment and termination to each string.
+        size_budget -= sum(len(value.encode("utf-8")) for value in record[:-1]) + 64
         if size_budget < 0:
             break
         payload.append(record)
@@ -193,6 +198,18 @@ def _reply(status: str, records: list[Record]) -> GLib.Variant:
     if result.get_size() > MAX_REPLY_BYTES:
         return GLib.Variant(RETURN_TYPE, ("capped", []))
     return result
+
+
+def _wire_reply(
+    request: Gio.DBusMessage, sender: str, outcome: Outcome
+) -> GLib.Variant:
+    body = _reply(*outcome)
+    message = Gio.DBusMessage.new_method_reply(request)
+    message.set_sender(sender)
+    message.set_body(body)
+    if len(message.to_blob(Gio.DBusCapabilityFlags.NONE)) > MAX_REPLY_BYTES:
+        return _reply("capped", [])
+    return body
 
 
 class AuditReader:
@@ -248,9 +265,14 @@ class AuditReader:
         self._peer = sender
         self._cancel.clear()
         self._auth_cancel = Gio.Cancellable()
-        threading.Thread(
+        worker = threading.Thread(
             target=self._serve, args=(sender, invocation), name="audit-reader-request"
-        ).start()
+        )
+        try:
+            worker.start()
+        except RuntimeError:
+            self._peer = None
+            invocation.return_value(_reply("unavailable", []))
 
     def _serve(self, sender, invocation):
         peer = None
@@ -288,5 +310,11 @@ class AuditReader:
 
     def _finish(self, invocation, outcome):
         self._peer = None
-        invocation.return_value(_reply("cancelled", []) if self._cancel.is_set() else _reply(*outcome))
+        if self._cancel.is_set():
+            outcome = ("cancelled", [])
+        try:
+            body = _wire_reply(invocation.get_message(), self._connection.get_unique_name(), outcome)
+        except GLib.Error:
+            body = _reply("unavailable", [])
+        invocation.return_value(body)
         return GLib.SOURCE_REMOVE

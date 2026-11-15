@@ -188,6 +188,20 @@ class PrivateBusTests(unittest.TestCase):
 
 
 class PolicyAndProjectionTests(unittest.TestCase):
+    def test_logind_without_a_session_is_ineligible(self):
+        auth = reader.SystemAuthorization(None)
+        peer = reader.Peer(":1.23", 1000, 5, -1)
+        error = Gio.DBusError.new_for_dbus_error(
+            "org.freedesktop.login1.NoSessionForPID", "No session"
+        )
+        with (
+            patch.object(reader.Peer, "alive", return_value=True),
+            patch.object(auth, "_call", side_effect=[(True,), error]) as call,
+        ):
+            self.assertFalse(auth.eligible(peer))
+        self.assertEqual([item.args[3] for item in call.call_args_list],
+                         ["NameHasOwner", "GetSessionByPID"])
+
     def test_policy_request_is_bound_to_connection_and_explicitly_cancelled(self):
         auth = reader.SystemAuthorization(None)
         peer = reader.Peer(":1.23", 1000, 5, -1)
@@ -233,3 +247,20 @@ class PolicyAndProjectionTests(unittest.TestCase):
         self.assertEqual(status, "capped")
         self.assertGreater(len(output), 0)
         self.assertLessEqual(reply.get_size(), reader.MAX_REPLY_BYTES)
+
+    def test_serialized_dbus_reply_respects_wire_limit(self):
+        request = Gio.DBusMessage.new_method_call(
+            reader.BUS_NAME, reader.OBJECT_PATH, reader.INTERFACE, "GetRecentAvcs"
+        )
+        request.set_serial(15)
+        request.set_sender(":1.123")
+        records = [("1.0", "2", "a" * 255, "s" * 511, "t" * 509, "file", 0)] * 200
+        body = reader._wire_reply(request, ":1.2", ("ok", records))
+        status, projected = body.unpack()
+        self.assertEqual(status, "capped")
+        self.assertGreater(len(projected), 0)
+        reply = Gio.DBusMessage.new_method_reply(request)
+        reply.set_sender(":1.2")
+        reply.set_body(body)
+        self.assertLessEqual(len(reply.to_blob(Gio.DBusCapabilityFlags.NONE)),
+                             reader.MAX_REPLY_BYTES)
