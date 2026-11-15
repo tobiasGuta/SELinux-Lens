@@ -153,7 +153,13 @@ class LensWindow(Adw.ApplicationWindow):
         content.set_shrink_end_child(False)
         toolbar.set_content(content)
         self.set_content(toolbar)
+        self._cancel_collection = threading.Event()
+        self.connect("close-request", self._close_requested)
         self._refresh()
+
+    def _close_requested(self, _window: Gtk.Window) -> bool:
+        self._cancel_collection.set()
+        return False
 
     def _refresh_clicked(self, _button: Gtk.Button) -> None:
         self._refresh()
@@ -169,12 +175,16 @@ class LensWindow(Adw.ApplicationWindow):
         self.notice_label.set_text("Reading the recent audit window…")
 
         def work() -> None:
-            snapshot = load_recent()
-            GLib.idle_add(self._finish, snapshot)
+            snapshot = load_recent(cancel=self._cancel_collection)
+            if not self._cancel_collection.is_set():
+                GLib.idle_add(self._finish, snapshot)
 
-        threading.Thread(target=work, name="selinux-lens-audit", daemon=True).start()
+        # Allow cleanup and child reaping if the application exits mid-query.
+        threading.Thread(target=work, name="selinux-lens-audit").start()
 
     def _finish(self, snapshot: Snapshot) -> bool:
+        if self._cancel_collection.is_set():
+            return GLib.SOURCE_REMOVE
         self._busy = False
         self.refresh_button.set_sensitive(True)
         self._snapshot = snapshot

@@ -16,7 +16,7 @@ Why: AVC messages by themselves are incomplete evidence. Preserve unknowns and n
 Why: maintain testability in non-Fedora CI, isolate I/O and enable future parsers/backends. GUI only imports from established domain modules.
 
 ## ADR-006: Short, recent window and 200-event cap (temporary)
-Why: avoid overwhelming UI. Tradeoff: misses older events and post-capture 2 MB output rejection is not a hard memory bound. Next milestone must implement bounded streaming and explicit partial/capped state.
+The fixed time window and record cap keep the event list usable. The collector enforces stdout and stderr budgets while reading. A query that hits either budget reports the cap and discards partial output. Older events remain outside the query window.
 
 ## ADR-007: In-memory state, explicit JSON export (accepted for v0.1)
 Why: avoid accidental privacy-sensitive databases. Reports redact target names/paths and omit raw records, though other identifying data remains. Future export may add granular redaction and safe atomic writes.

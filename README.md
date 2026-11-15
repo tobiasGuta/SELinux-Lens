@@ -10,7 +10,7 @@ SELinux Lens is a read-only, native Fedora GNOME app for investigating SELinux A
 
 - Native GTK4/Libadwaita two-pane investigation window.
 - Read current SELinux mode from `getenforce`.
-- Query `ausearch -m AVC,USER_AVC -ts recent` (roughly the last ten minutes).
+- Query local audit logs with `ausearch --input-logs -m AVC,USER_AVC -ts recent` (roughly the last ten minutes).
 - Parse AVC records, show process, requested permissions, process/target security contexts, object class, audit serial, UTC timestamp, raw record, and permissive flag where present.
 - Search and filter AVC records by process, context, permission, target, serial, and enforcing/permissive disposition.
 - Evidence-first descriptions and hypotheses, never definitive root-cause claims from a single AVC.
@@ -81,6 +81,6 @@ The app stores records in memory during the session and does not run a backgroun
 
 ## Status and limitations
 
-This is an early development preview, **not a production-ready security control**. Audit access depends on user privileges and host policy; the initial GUI has no authenticated helper. No RPM, background events, full audit-event correlation, authoritative SELinux policy analysis, or automated remediation exists yet. The 2 MB limit is applied after subprocess capture and is **not** a hard process-memory cap (see roadmap). Report redaction is partial.
+This is an early development preview, **not a production-ready security control**. Audit access depends on user privileges and host policy; the initial GUI has no authenticated helper. No RPM, background events, full audit-event correlation, authoritative SELinux policy analysis, or automated remediation exists yet. The collector bounds audit stdout to 2 MB and stderr to 16 KiB while reading. Report redaction is partial.
 
 Licensed under MIT. Contributions should follow [AGENTS.md](AGENTS.md) and [docs/SECURITY.md](docs/SECURITY.md).

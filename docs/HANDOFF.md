@@ -10,7 +10,7 @@ The initial v0.1 code implements a GTK4/Libadwaita inspection shell around read-
 2. Run `make test && make compile`.
 3. Re-test `bash run.sh --demo` as a regular user, including search, filters, keyboard support and export; initial launch/render has been observed.
 4. Run `bash run.sh` as a regular user and improve its permission-denied empty state; ordinary-user denial has been observed.
-5. Implement a truly bounded collector (stream limits and cancellation), add tests and update docs.
+5. Continue input hardening with per-line limits and safe rendering of untrusted control characters.
 6. Review report redaction and export safety; treat both as security-critical.
 7. Open PRs with evidence of actual testing rather than claiming an unverified app is production-ready.
 
@@ -28,7 +28,7 @@ These are **user-reported observations from screenshots and terminal output**, n
 ## Known implementation gaps
 
 - GTK rendering and the in-process chooser were tested on Fedora 45. Portal-backed export and physical keyboard accessibility checks remain open.
-- Audit output cap currently occurs after capture; memory use is not bounded by it.
+- The collector enforces stream budgets while reading and cancels on close. Individual audit lines still need a size limit and control-character handling.
 - Audit collection reads only recent AVC/USER_AVC and does not correlate companion records.
 - UI always displays raw AVC text locally; export redacts only target path/name, not all sensitive fields.
 - No Polkit helper; ordinary Fedora user may see audit access denied.
