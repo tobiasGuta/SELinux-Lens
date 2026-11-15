@@ -13,7 +13,7 @@ Unit tests exercise AVC parsing, record ordering, permissive semantics, dependen
 
 GitHub Actions runs compile/tests on Python 3.11 and 3.13. Passing these checks **does not validate runtime GTK compatibility, SELinux policy behavior, audit access or safe use on a live workstation**.
 
-## Fedora GNOME manual checklist (not yet completed)
+## Fedora GNOME manual checklist (partially completed; see observations below)
 
 1. On Fedora GNOME with a normal user, install `python3 python3-gobject gtk4 libadwaita audit` and launch `bash run.sh --demo`.
 2. Confirm the window renders without warnings, shows 'Demo (fictional)', contains three events, and selects the first.
@@ -25,6 +25,14 @@ GitHub Actions runs compile/tests on Python 3.11 and 3.13. Passing these checks 
 8. Exercise empty audit window, unavailable `ausearch`, malformed lines, extended raw records and rapid refresh.
 9. Close the app, verify no background helper or daemon remains; inspect local files for no unexpected persisted audit data.
 10. Record exact Fedora, GNOME, GTK, Libadwaita, Python and SELinux versions plus observations in the PR or release notes.
+
+## User-reported Fedora observations (2026-11-15)
+
+- **Observed:** `bash run.sh --demo` launches the GTK interface and visibly renders all three fictional records with the first record's context, reasoning, and raw AVC text.
+- **Observed:** `bash run.sh` launches in real mode, shows `SELinux: Enforcing`, and explicitly reports denied audit access for the ordinary user.
+- **Observed:** `sudo ausearch -m AVC,USER_AVC -ts recent` and `sudo ausearch -m AVC,USER_AVC -ts today` returned `<no matches>` at the time of testing. Distinguish no matching audit records from insufficient permission. Neither proves the absence of any unlogged denial.
+- **Not verified:** search/filter interaction, JSON export, all GTK dialog behavior, accessibility, actual populated privileged audit data in GUI, complete Fedora/package version matrix.
+- **Follow-up:** test interaction/export with demo, improve the empty-state layout and design authorized least-privilege audit retrieval (never elevate the GUI).
 
 ## Future integration tests
 
