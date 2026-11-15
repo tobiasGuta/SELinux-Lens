@@ -1,6 +1,6 @@
 # Codex / contributor instructions — SELinux Lens
 
-This is the source-of-truth handoff for ongoing work. Read `README.md`, `docs/PRODUCT.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/ROADMAP.md`, and `docs/HANDOFF.md` before changing behavior. The repository is a **safe, evidence-first Fedora desktop investigation tool**, not a policy editor.
+This is the source-of-truth handoff for ongoing work. Read `README.md`, `docs/PRODUCT.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/ROADMAP.md`, and `docs/HANDOFF.md` before changing behavior. Review `docs/AUDIT_ACCESS.md` for authorization changes and `docs/REPORT_FORMAT.md` for export changes. The repository is a **safe, evidence-first Fedora desktop investigation tool**, not a policy editor.
 
 ## Product invariant
 
@@ -37,10 +37,11 @@ Add new functions to the appropriate layer. Preserve dependency direction: GUI -
 5. Include a security-impact statement for changes touching subprocess, filesystem, privilege, policy logic or export.
 6. Prefer feature branches and PR review; don't force-push main. Document what was verified vs. merely reasoned about.
 7. Do not overwrite or discard user changes. Check branch and working tree state before editing.
+8. Use the repository's configured Git identity. Keep commit and pull request text focused on the engineering changes.
 
 ## Near-term priorities
 
-P0: Fedora GNOME manual smoke test; fix actual GTK binding/API issues; ensure `run.sh --demo` works without audit permission. P0: implement true bounded subprocess capture with timeout, exit status and stderr collection. P0: improve non-root audit availability without escalating the GUI. P1: parse and correlate same-serial `SYSCALL`, `PATH`, and `PROCTITLE` while preserving provenance. P1: policy/context inspection with precise source attribution. P1: more complete privacy/redaction and robust UTF-8 handling. P2: UI refinements, distributions, RPM, desktop files and integration testing. Detailed milestones and acceptance tests live in `docs/ROADMAP.md`.
+P0: validate the authorized audit reader design in an isolated Fedora GNOME VM and keep the GTK process unprivileged. P0: finish real-device validation for portal export, physical keyboard accessibility, and populated audit queries. P1: improve audit coverage indicators and preserve provenance through grouping and policy/context inspection. P2: distribution, RPM, desktop files and integration testing. Detailed milestones and acceptance tests live in `docs/ROADMAP.md`.
 
 ## Completion criteria for any milestone
 
