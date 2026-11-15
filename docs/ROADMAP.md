@@ -22,6 +22,8 @@ The roadmap is a plan, **not a list of implemented features**. Prioritize safety
 
 ## v0.2 — Reliable audit access and correlation
 
+Compare system-supported sources and review a minimal, read-only interface before implementing privileged access. [Authorized audit access proposal](AUDIT_ACCESS.md)
+
 - Design a minimal audited **read-only** privileged data source (Polkit if truly necessary); no root GUI.
 - Correlate same-serial AVC/SYSCALL/PATH/PROCTITLE, explicit evidence provenance and incomplete-record handling.
 - Separate 'no events', 'no permission', 'SELinux disabled', 'audit disabled', 'collection timed out', 'partial evidence'.
