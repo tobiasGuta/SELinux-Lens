@@ -14,7 +14,7 @@ Attacker-controlled paths, process names, audit fields, malformed log lines, loc
 
 - Host audit tools -> Python parser: untrusted text, strict parsing and explicit unknowns.
 - Parser -> UI: text only, no Pango markup and no shell commands derived from audit data.
-- UI -> user-selected file: explicit action and shareable v2 serialization. The app writes in a private staging directory and publishes the finished file under a new name.
+- UI -> user-selected file: explicit action and shareable v2 serialization. The app opens each destination directory component without following symlinks and publishes a finished, previously unnamed inode under a new name.
 - Future UI -> elevated reader: high-risk privilege boundary requiring independent design and review.
 
 ## Current safeguards
@@ -31,7 +31,7 @@ Attacker-controlled paths, process names, audit fields, malformed log lines, loc
 
 ## Current limitations / known risks
 
-- The v1 Python report API retains process names, PIDs, contexts and the report notice. Use the GUI's v2 export when sharing a summary. The destination filesystem must support local hard links for atomic publication under a new name.
+- The v1 Python report API retains process names, PIDs, contexts and the report notice. Use the GUI's v2 export when sharing a summary. Atomic publication requires a local filesystem with Linux unnamed temporary file and hard-link support, plus procfs for publishing the open file as the desktop user.
 - Audit coverage can be incomplete. Related evidence previews may contain sensitive identities, paths, and encoded command arguments. The previews are collapsed by default and omitted from reports.
 - Host audit access and tools differ by Fedora configuration and version. See the [Fedora 45 smoke test](TESTING.md#fedora-gnome-smoke-test) for the audit permission result on the development workstation.
 - A local attacker who already controls the user session can read in-memory audit data shown to that user; there is no protected secret store.

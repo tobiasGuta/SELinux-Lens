@@ -16,7 +16,7 @@ The roadmap is a plan, **not a list of implemented features**. Prioritize safety
 
 - Bounded streaming stdout/stderr capture, subprocess deadlines, cancellation on window close and high-volume regression tests are implemented.
 - Display invalid UTF-8 with replacement characters. Audit lines and previews have length limits and the preview escapes untrusted control characters.
-- Distinguish no matches from audit errors, permission denial and incomplete results. Validate across Fedora versions and audit configurations.
+- Distinguish no matches, missing sources, malformed output, incomplete results, permission denial and audit errors. Validate across Fedora versions and audit configurations.
 - Shareable v2 export omits identifying fields and publishes complete files with private permissions under new names. Field selection for a detailed desktop export remains open.
 - Add deterministic corpus of SELinux AVC shapes (host variations, malformed, duplicate, permissive, missing fields); protect against false interpretations.
 

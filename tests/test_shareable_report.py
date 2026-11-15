@@ -58,6 +58,37 @@ class ShareableReportTests(unittest.TestCase):
             write_shareable_report(self.snapshot, original)
         self.assertEqual(original.read_text(encoding="utf-8"), "original")
 
+    def test_export_rejects_symlinks_in_parent_and_ancestor_components(self):
+        root = self.destination.parent
+        actual = root / "actual"
+        actual.mkdir()
+        nested = actual / "nested"
+        nested.mkdir()
+        alias = root / "alias"
+        alias.symlink_to(actual, target_is_directory=True)
+        for folder in (alias, alias / "nested"):
+            with self.subTest(folder=folder), self.assertRaises(OSError):
+                write_shareable_report(self.snapshot, folder / self.destination.name)
+        self.assertEqual(list(actual.iterdir()), [nested])
+        self.assertEqual(list(nested.iterdir()), [])
+
+    def test_export_keeps_its_open_directory_during_a_rename(self):
+        root = self.destination.parent
+        selected = root / "selected"
+        selected.mkdir()
+        moved = root / "moved"
+        unrelated = root / "unrelated"
+        unrelated.mkdir()
+
+        def rename_directory(_):
+            selected.rename(moved)
+            selected.symlink_to(unrelated, target_is_directory=True)
+
+        with patch("selinux_lens.report.os.fsync", side_effect=rename_directory):
+            write_shareable_report(self.snapshot, selected / self.destination.name)
+        self.assertTrue((moved / self.destination.name).is_file())
+        self.assertEqual(list(unrelated.iterdir()), [])
+
     def test_failed_write_leaves_no_output_or_staging(self):
         with patch("selinux_lens.report.os.fsync", side_effect=OSError("storage error")):
             with self.assertRaises(OSError):

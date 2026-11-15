@@ -4,7 +4,7 @@
 
 The desktop export writes UTF-8 JSON with a trailing newline. The report contains `schema`, a broad `source` of `demo` or `audit`, `selinux_mode`, the typed `collection_status`, `event_count` and an `events` array. Each event includes `permissions`, `target_class` and `permissive`. The last field is true, false, or null for an unknown disposition. Invalid text fields are empty.
 
-The export omits times, serials, contexts, paths, process names and IDs, raw records, companion evidence and free-form diagnostics. Requested operations and target classes can still reveal system activity. Reports are created with private file permissions. Choose a new name for each export.
+The export omits times, serials, contexts, paths, process names and IDs, raw records, companion evidence and free-form diagnostics. Requested operations and target classes can still reveal system activity. Reports are created with private file permissions. Choose a new name and a direct path to a local folder that supports Linux unnamed temporary files and hard links.
 
 ## Detailed API export — selinux-lens-report/v1
 

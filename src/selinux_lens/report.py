@@ -5,10 +5,9 @@ from __future__ import annotations
 import json
 import os
 import re
-import stat
 from datetime import datetime, timezone
+from errno import EINVAL
 from pathlib import Path
-from secrets import token_hex
 
 from .explain import interpret
 from .models import Snapshot
@@ -84,41 +83,37 @@ def serialize_shareable_report(snapshot: Snapshot) -> str:
 
 def write_shareable_report(snapshot: Snapshot, destination: Path) -> None:
     """Publish a complete private report under a new name in the chosen directory."""
+    if not destination.name or destination.name == "..":
+        raise OSError(EINVAL, "Choose a report filename")
     data = serialize_shareable_report(snapshot)
-    directory = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
-    stage_name = ".selinux-lens-" + token_hex(16)
+    directory = _open_export_directory(destination.parent)
     try:
-        os.mkdir(stage_name, mode=0o700, dir_fd=directory)
-        try:
-            stage = os.open(
-                stage_name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
-                dir_fd=directory,
-            )
-            try:
-                metadata = os.fstat(stage)
-                if metadata.st_uid != os.geteuid() or stat.S_IMODE(metadata.st_mode) & 0o077:
-                    raise PermissionError("Report staging directory is not private")
-                _publish(stage, directory, destination.name, data)
-            finally:
-                os.close(stage)
-        finally:
-            os.rmdir(stage_name, dir_fd=directory)
-    finally:
-        os.close(directory)
-
-
-def _publish(stage: int, directory: int, name: str, data: str) -> None:
-    fd = os.open(
-        "report", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
-        0o600, dir_fd=stage,
-    )
-    try:
+        fd = os.open(".", os.O_WRONLY | os.O_TMPFILE | os.O_CLOEXEC, 0o600, dir_fd=directory)
         with os.fdopen(fd, "w", encoding="utf-8") as report:
             report.write(data)
             report.flush()
             os.fsync(report.fileno())
-        os.link(
-            "report", name, src_dir_fd=stage, dst_dir_fd=directory, follow_symlinks=False
-        )
+            # The kernel's procfs link pins this open inode. The destination is new.
+            os.link(
+                f"/proc/self/fd/{report.fileno()}", destination.name,
+                dst_dir_fd=directory, follow_symlinks=True,
+            )
     finally:
-        os.unlink("report", dir_fd=stage)
+        os.close(directory)
+
+
+def _open_export_directory(path: Path) -> int:
+    root, *components = path.absolute().parts
+    if ".." in components:
+        raise OSError(EINVAL, "Choose a direct path to the report folder")
+    flags = os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    directory = os.open(root, flags)
+    try:
+        for component in components:
+            child = os.open(component, flags, dir_fd=directory)
+            os.close(directory)
+            directory = child
+        return directory
+    except BaseException:
+        os.close(directory)
+        raise

@@ -23,12 +23,13 @@ _RELATED_PREVIEW_COUNT = 12
 _EMPTY_TITLES = {
     CollectionStatus.PERMISSION_DENIED: "Audit access required",
     CollectionStatus.NO_MATCHES: "No recent AVC denials",
-    CollectionStatus.UNAVAILABLE: "Audit tool unavailable",
+    CollectionStatus.UNAVAILABLE: "Audit source unavailable",
     CollectionStatus.FAILED: "Audit query failed",
     CollectionStatus.TIMED_OUT: "Audit query timed out",
     CollectionStatus.OUTPUT_LIMIT: "Audit output limit reached",
     CollectionStatus.CANCELLED: "Audit query cancelled",
     CollectionStatus.INCOMPLETE: "Audit evidence incomplete",
+    CollectionStatus.MALFORMED: "Audit output could not be read",
 }
 
 

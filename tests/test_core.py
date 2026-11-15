@@ -101,17 +101,27 @@ class CollectionTests(unittest.TestCase):
             "query failed", self.load_result(1, stderr=b"Read error\n<no matches>\n").notice
         )
 
-    def test_warning_or_unparseable_output_is_not_an_empty_success(self):
-        for snap in (
-            self.load_result(0, stderr=b"configuration warning"),
-            self.load_result(0, stdout=b"unsupported format"),
-        ):
-            self.assertEqual(snap.status, CollectionStatus.INCOMPLETE)
-            self.assertEqual(snap.events, ())
-        partial = self.load_result(0, stdout=AVC.encode(), stderr=b"configuration warning")
+    def test_malformed_capture_is_distinct_from_missing_and_empty(self):
+        missing = self.load_result(
+            1, stderr=b"Error opening /private/audit.log (No such file or directory)"
+        )
+        self.assertEqual(missing.status, CollectionStatus.UNAVAILABLE)
+        self.assertNotIn("/private", missing.notice)
+        malformed = self.load_result(0, stdout=b"type=AVC msg=audit(truncated)")
+        self.assertEqual(malformed.status, CollectionStatus.MALFORMED)
+        self.assertEqual(malformed.events, ())
+        granted = AVC.replace("avc: denied", "avc: granted").encode()
+        self.assertEqual(self.load_result(0, stdout=granted).status, CollectionStatus.NO_MATCHES)
+
+    def test_warnings_missing_avc_and_mixed_malformed_output_are_incomplete(self):
+        warning = self.load_result(0, stderr=b"configuration warning")
+        self.assertEqual(warning.status, CollectionStatus.INCOMPLETE)
+        self.assertNotIn("configuration", warning.notice)
+        companion = b"type=SYSCALL msg=audit(1763150400.123:42): arch=c000003e syscall=2"
+        self.assertEqual(self.load_result(0, stdout=companion).status, CollectionStatus.INCOMPLETE)
+        partial = self.load_result(0, stdout=AVC.encode() + b"\ntype=PATH msg=audit(truncated)")
         self.assertEqual(partial.status, CollectionStatus.INCOMPLETE)
         self.assertEqual(len(partial.events), 1)
-        self.assertNotIn("configuration", partial.notice)
 
     def test_record_limit_retains_only_complete_denial_records(self):
         text = "\n".join(AVC for _ in range(MAX_EVENTS + 1)).encode()

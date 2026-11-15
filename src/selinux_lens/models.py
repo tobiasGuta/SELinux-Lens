@@ -14,6 +14,7 @@ class CollectionStatus(StrEnum):
     OUTPUT_LIMIT = "output_limit"
     CANCELLED = "cancelled"
     INCOMPLETE = "incomplete"
+    MALFORMED = "malformed"
 
 
 @dataclass(frozen=True, slots=True)

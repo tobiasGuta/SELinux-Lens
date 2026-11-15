@@ -33,6 +33,10 @@ These are **user-reported observations from screenshots and terminal output**, n
 - No Polkit helper; ordinary Fedora user may see audit access denied.
 - No RPM, desktop metadata, icons, integration tests or full live timeline.
 
+## v0.1.1 candidate observations
+
+The user reported a current checkout and 38 passing tests. On Fedora, the demo showed three records with incomplete PATH evidence, and normal mode showed **Audit access required** under enforcing SELinux with export disabled. An inspected shareable v2 demo report contained only the three permitted event fields. The observed workflow and remaining checks are recorded in the test guide. [User-observed validation](TESTING.md#user-observed-v011-candidate-check)
+
 ## Minimal acceptance test for the next PR
 
 No root GUI, no SELinux configuration writes, all unit tests passing, demo load and filters working on a real Fedora desktop, explicit no-access state, correct permissive interpretation, redacted JSON export, and documented evidence/limitations. Review any new privilege boundary separately and do not bundle a helper into a cosmetic PR.
