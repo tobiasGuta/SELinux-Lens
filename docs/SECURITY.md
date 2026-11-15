@@ -38,6 +38,8 @@ Attacker-controlled paths, process names, audit fields, malformed log lines, loc
 
 ## Future privileged reader — design constraints
 
+See the [authorized audit access proposal](AUDIT_ACCESS.md) for the comparison of Fedora sources, proposed Polkit contract, disclosure limits, and review tests.
+
 Do not accept arbitrary commands or paths from the UI. Expose a minimal, versioned, read-only D-Bus contract; authorize the caller with Polkit only for explicit narrowly scoped requests; avoid shell, env inheritance and writable code paths; cap request length, output count, time, memory and rate; privilege-drop where possible; defend against race conditions, symlink traversal and caller impersonation. Log sensitive access without leaking records. Prefer established system-supported audit access where it can satisfy least privilege. Threat-model and test before enabling by default.
 
 ## Safe remediation philosophy
