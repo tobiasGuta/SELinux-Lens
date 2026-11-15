@@ -14,25 +14,24 @@ Attacker-controlled paths, process names, audit fields, malformed log lines, loc
 
 - Host audit tools -> Python parser: untrusted text, strict parsing and explicit unknowns.
 - Parser -> UI: text only, no Pango markup and no shell commands derived from audit data.
-- UI -> user-selected file: explicit action; redaction before saving. User owns destination.
+- UI -> user-selected file: explicit action and shareable v2 serialization. The app writes in a private staging directory and publishes the finished file under a new name.
 - Future UI -> elevated reader: high-risk privilege boundary requiring independent design and review.
 
 ## Current safeguards
 
 - Fixed absolute executable paths and arguments, `shell=False`, closed stdin, and a fixed locale with no inherited environment variables.
-- Separate stdout and stderr capture limits, deadlines, and cancellation when the window closes. Failed, capped or cancelled queries do not expose partial output or child diagnostics. The byte limits apply to captured data in the parent. The child process retains the OS limits of the desktop session.
+- Separate stdout and stderr capture limits, deadlines, and cancellation when the window closes. A byte cap, cancellation or subprocess failure discards captured output. If the parsed record count exceeds the display limit, the app shows the newest complete records and reports the limit. The byte limits apply to captured data in the parent. The child process retains the OS limits of the desktop session.
 - Strict record selection (AVC/USER_AVC and denial).
 - Companion previews require a supported type and matching node, timestamp and serial within one capture. They do not supply AVC path or process fields. The UI escapes control characters and bounds rendered previews.
 - Missing/invalid fields shown as unknown, not invented.
-- No implicit policy writes or privilege escalation.
+- The desktop entry point checks for effective UID zero before initializing GTK. Collection has no implicit policy writes or privilege escalation.
 - Memory-only current working set.
-- Export redacts the target name/path field and omits full raw records.
+- Desktop export omits identifying fields, diagnostic text and raw or companion records. The finished file uses mode 0600 or stricter. An existing file or symlink at the chosen name is preserved.
 - Demo records are explicitly fictional; no host audit access required.
 
 ## Current limitations / known risks
 
-- A user-chosen export path can overwrite an existing file through the regular GTK save dialog; the current implementation uses regular file writes, not hardened atomic writes.
-- Report redaction is partial: process names, PIDs, source/target contexts and the report notice remain. Do not publish raw/real reports without review.
+- The v1 Python report API retains process names, PIDs, contexts and the report notice. Use the GUI's v2 export when sharing a summary. The destination filesystem must support local hard links for atomic publication under a new name.
 - Audit coverage can be incomplete. Related evidence previews may contain sensitive identities, paths, and encoded command arguments. The previews are collapsed by default and omitted from reports.
 - Host audit access and tools differ by Fedora configuration and version. See the [Fedora 45 smoke test](TESTING.md#fedora-gnome-smoke-test) for the audit permission result on the development workstation.
 - A local attacker who already controls the user session can read in-memory audit data shown to that user; there is no protected secret store.

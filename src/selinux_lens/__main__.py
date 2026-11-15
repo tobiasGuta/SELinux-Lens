@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from . import __version__
@@ -16,6 +17,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--demo", action="store_true", help="Show fictional demo records.")
     parser.add_argument("--version", action="version", version=f"SELinux Lens {__version__}")
     args = parser.parse_args(argv)
+    if os.geteuid() == 0:
+        print("Launch SELinux Lens from your regular desktop account.", file=sys.stderr)
+        return 2
     try:
         from .gui import launch
     except (ImportError, ValueError) as exc:

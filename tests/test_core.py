@@ -6,10 +6,10 @@ import json
 import subprocess
 import unittest
 
-from selinux_lens.audit import load_recent, parse_ausearch, selinux_mode
+from selinux_lens.audit import MAX_EVENTS, load_recent, parse_ausearch, selinux_mode
 from selinux_lens.demo import demo_snapshot
 from selinux_lens.explain import interpret
-from selinux_lens.models import Snapshot
+from selinux_lens.models import CollectionStatus, Snapshot
 from selinux_lens.report import build_report, serialize_report
 
 
@@ -87,14 +87,37 @@ class CollectionTests(unittest.TestCase):
     def test_permission_denied_is_not_silent(self):
         snap = self.load_result(1, stderr=b"Permission denied")
         self.assertEqual(snap.events, ())
+        self.assertEqual(snap.status, CollectionStatus.PERMISSION_DENIED)
         self.assertIn("access was denied", snap.notice)
 
     def test_ausearch_no_matches_is_distinct_from_a_failed_query(self):
-        self.assertIn("No AVC denials", self.load_result(1, stderr=b"<no matches>\n").notice)
-        self.assertIn("query failed", self.load_result(1).notice)
+        empty = self.load_result(1, stderr=b"<no matches>\n")
+        self.assertEqual(empty.status, CollectionStatus.NO_MATCHES)
+        self.assertIn("No AVC denials", empty.notice)
+        failed = self.load_result(1)
+        self.assertEqual(failed.status, CollectionStatus.FAILED)
+        self.assertIn("query failed", failed.notice)
         self.assertIn(
             "query failed", self.load_result(1, stderr=b"Read error\n<no matches>\n").notice
         )
+
+    def test_warning_or_unparseable_output_is_not_an_empty_success(self):
+        for snap in (
+            self.load_result(0, stderr=b"configuration warning"),
+            self.load_result(0, stdout=b"unsupported format"),
+        ):
+            self.assertEqual(snap.status, CollectionStatus.INCOMPLETE)
+            self.assertEqual(snap.events, ())
+        partial = self.load_result(0, stdout=AVC.encode(), stderr=b"configuration warning")
+        self.assertEqual(partial.status, CollectionStatus.INCOMPLETE)
+        self.assertEqual(len(partial.events), 1)
+        self.assertNotIn("configuration", partial.notice)
+
+    def test_record_limit_retains_only_complete_denial_records(self):
+        text = "\n".join(AVC for _ in range(MAX_EVENTS + 1)).encode()
+        snapshot = self.load_result(0, stdout=text)
+        self.assertEqual(snapshot.status, CollectionStatus.OUTPUT_LIMIT)
+        self.assertEqual(len(snapshot.events), MAX_EVENTS)
 
     def test_failure_does_not_publish_partial_output_or_raw_diagnostics(self):
         snap = self.load_result(2, stdout=AVC.encode(), stderr=b"/private/diagnostic")

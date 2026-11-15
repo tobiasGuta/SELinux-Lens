@@ -48,6 +48,12 @@ The bounded collector was exercised in the Fedora 45 GNOME Wayland session with 
 
 The correlation UI was exercised in the same session with the fictional demo and synthetic records. Checks covered output line provenance, incomplete PATH counts, permissive wording, keyboard focus traversal, an 8 KiB command with a bidi control, resizing, light and dark styles, and clearing evidence when search returns no rows. Fedora's `ausearch` also returned all three supported companion types from a synthetic audit file.
 
+## Investigation states and shareable export
+
+Fedora 45 GNOME showed distinct status pages for real audit permission denial, a simulated successful empty query and a simulated query failure. Search with no results used a separate filter message. The demo and synthetic evidence checks exercised focus traversal, an 8 KiB value, incomplete PATH evidence, permissive wording, resizing and light and dark appearance.
+
+The GTK in-process native chooser saved a shareable v2 report and handled cancel and an injected write failure. Automated tests verify the v1 report API, v2 redaction, file permissions, existing files and symlinks, failure cleanup, concurrent exports, and the root-launch guard. Portal-backed chooser and physical keyboard testing remain open.
+
 ## Future integration tests
 
 Use synthetic audit streams and keep personal raw logs out of fixtures. Correlation tests cover full audit identity, capture and node boundaries, duplicate and malformed lines, quoted field boundaries, incomplete PATH coverage, permissive records, UTC time, and the v1 report boundary. Add integration tests for Polkit authorization denial and helper failure in an isolated Fedora VM. Ordinary CI leaves host SELinux policy intact.

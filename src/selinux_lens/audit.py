@@ -14,7 +14,7 @@ from threading import Event
 from time import monotonic
 from typing import Callable
 
-from .models import AuditEvidence, Denial, RelatedAuditRecord, Snapshot
+from .models import AuditEvidence, CollectionStatus, Denial, RelatedAuditRecord, Snapshot
 
 MAX_OUTPUT_BYTES = 2_000_000
 MAX_ERROR_BYTES = 16_384
@@ -285,23 +285,27 @@ def load_recent(
             error_limit=MAX_ERROR_BYTES, cancel=cancel,
         )
     except CollectionCancelled:
-        return Snapshot(mode, (), "ausearch", "Audit query cancelled.")
+        return Snapshot(mode, (), "ausearch", "Audit query cancelled.", CollectionStatus.CANCELLED)
     except FileNotFoundError:
         return Snapshot(
             mode, (), "ausearch",
             "ausearch is unavailable. Install audit and retry, or use Demo mode.",
+            CollectionStatus.UNAVAILABLE,
         )
     except PermissionError:
-        return Snapshot(mode, (), "ausearch", "Audit access was denied.")
+        return Snapshot(
+            mode, (), "ausearch", "Audit access was denied.", CollectionStatus.PERMISSION_DENIED
+        )
     except subprocess.TimeoutExpired:
-        return Snapshot(mode, (), "ausearch", "Audit query timed out.")
+        return Snapshot(mode, (), "ausearch", "Audit query timed out.", CollectionStatus.TIMED_OUT)
     except CaptureLimitReached:
         return Snapshot(
             mode, (), "ausearch",
             "Audit query exceeded its output safety limit. No records were loaded.",
+            CollectionStatus.OUTPUT_LIMIT,
         )
     except OSError:
-        return Snapshot(mode, (), "ausearch", "Could not run the audit query.")
+        return Snapshot(mode, (), "ausearch", "Could not run the audit query.", CollectionStatus.FAILED)
 
     if result.returncode != 0:
         error = result.stderr.strip().lower()
@@ -310,16 +314,35 @@ def load_recent(
         )):
             return Snapshot(
                 mode, (), "ausearch",
-                "Audit access was denied. The GUI does not use sudo; see docs/SECURITY.md.",
+                "Audit access was denied while reading the system logs.",
+                CollectionStatus.PERMISSION_DENIED,
             )
         if result.returncode == 1 and not result.stdout and error == b"<no matches>":
-            return Snapshot(mode, (), "ausearch", "No AVC denials in the recent audit window.")
-        return Snapshot(mode, (), "ausearch", f"Audit query failed (exit {result.returncode}).")
+            return Snapshot(
+                mode, (), "ausearch", "No AVC denials in the recent audit window.",
+                CollectionStatus.NO_MATCHES,
+            )
+        return Snapshot(
+            mode, (), "ausearch", f"Audit query failed (exit {result.returncode}).",
+            CollectionStatus.FAILED,
+        )
 
-    events = parse_ausearch(result.stdout.decode("utf-8", errors="replace"))
-    notice = (
-        f"Showing the newest {MAX_EVENTS} denials from the recent audit window."
-        if len(events) == MAX_EVENTS
-        else "No parseable AVC denials in the recent audit output." if not events else ""
-    )
-    return Snapshot(mode, events, "ausearch", notice)
+    parsed = parse_ausearch(result.stdout.decode("utf-8", errors="replace"), limit=MAX_EVENTS + 1)
+    events = parsed[:MAX_EVENTS]
+    if result.stderr or (result.stdout.strip() and not events):
+        return Snapshot(
+            mode, events, "ausearch", "Audit output may be incomplete.",
+            CollectionStatus.INCOMPLETE,
+        )
+    if not events:
+        return Snapshot(
+            mode, (), "ausearch", "No AVC denials in the recent audit window.",
+            CollectionStatus.NO_MATCHES,
+        )
+    if len(parsed) > MAX_EVENTS:
+        return Snapshot(
+            mode, events, "ausearch",
+            f"Showing the newest {MAX_EVENTS} denials. The record limit was reached.",
+            CollectionStatus.OUTPUT_LIMIT,
+        )
+    return Snapshot(mode, events, "ausearch")
