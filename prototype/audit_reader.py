@@ -48,7 +48,7 @@ _CLASS = re.compile(r"[A-Za-z0-9_]{1,80}")
 _PERMISSIONS = re.compile(r"[A-Za-z0-9_ ]{1,256}")
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Peer:
     name: str
     uid: int
@@ -59,6 +59,19 @@ class Peer:
         poll = select.poll()
         poll.register(self.process_fd, select.POLLIN)
         return not poll.poll(0)
+
+
+@dataclass(frozen=True, slots=True)
+class SessionBinding:
+    owner: str
+    path: str
+    session_id: str
+    timestamp: int
+    seat: str
+
+
+_ACTIVE_PROPERTIES = {"Active": True, "Remote": False, "Class": "user", "State": "active"}
+_IDENTITY_PROPERTIES = {"User", "Id", "TimestampMonotonic", "Seat"}
 
 
 class SystemAuthorization:
@@ -89,43 +102,57 @@ class SystemAuthorization:
         process_fd = fd_list.get(handle)
         return Peer(sender, uid, pid, process_fd)
 
-    def eligible(self, peer: Peer) -> bool:
+    def binding(self, peer: Peer) -> SessionBinding | None:
         if not peer.alive():
-            return False
+            return None
         owner, = self._call(
             DBUS, DBUS_PATH, DBUS, "NameHasOwner", GLib.Variant("(s)", (peer.name,)), "(b)"
         )
         if not owner:
-            return False
+            return None
+        logind_owner, = self._call(
+            DBUS, DBUS_PATH, DBUS, "GetNameOwner", GLib.Variant("(s)", (LOGIN,)), "(s)"
+        )
         try:
             path, = self._call(
-                LOGIN, LOGIN_PATH, LOGIN + ".Manager", "GetSessionByPID",
+                logind_owner, LOGIN_PATH, LOGIN + ".Manager", "GetSessionByPID",
                 GLib.Variant("(u)", (peer.pid,)), "(o)",
             )
         except GLib.Error as error:
             if Gio.DBusError.get_remote_error(error) == LOGIN + ".NoSessionForPID":
-                return False
+                return None
             raise
         props, = self._call(
-            LOGIN, path, "org.freedesktop.DBus.Properties", "GetAll",
+            logind_owner, path, "org.freedesktop.DBus.Properties", "GetAll",
             GLib.Variant("(s)", (LOGIN + ".Session",)), "(a{sv})",
         )
         user = props.get("User")
-        return (
-            props.get("Active") is True
-            and props.get("Remote") is False
-            and props.get("Class") == "user"
-            and isinstance(user, (tuple, list))
+        seat = props.get("Seat")
+        session_id = props.get("Id")
+        timestamp = props.get("TimestampMonotonic")
+        if not (
+            isinstance(user, (tuple, list))
             and len(user) == 2
             and user[0] == peer.uid
+            and isinstance(seat, (tuple, list))
+            and len(seat) == 2
+            and isinstance(seat[0], str)
+            and seat[0]
+            and isinstance(session_id, str)
+            and session_id
+            and type(timestamp) is int
+            and timestamp > 0
+            and all(props.get(key) == value for key, value in _ACTIVE_PROPERTIES.items())
             and peer.alive()
-        )
+        ):
+            return None
+        return SessionBinding(logind_owner, path, session_id, timestamp, seat[0])
 
     def authorize(self, peer: Peer, cancel: Gio.Cancellable) -> bool:
         request_id = uuid4().hex
         subject = ("system-bus-name", {"name": GLib.Variant("s", peer.name)})
         try:
-            (authorized, _, _), = self._call(
+            (authorized, _, details), = self._call(
                 POLKIT, POLKIT_PATH, POLKIT_INTERFACE, "CheckAuthorization",
                 GLib.Variant("((sa{sv})sa{ss}us)", (subject, ACTION, {}, 1, request_id)),
                 "((bba{ss}))", timeout=60_000, cancel=cancel,
@@ -139,7 +166,10 @@ class SystemAuthorization:
             except GLib.Error:
                 pass
             raise
-        return authorized
+        return authorized and not {
+            "polkit.temporary_authorization_id",
+            "polkit.retains_authorization_after_challenge",
+        }.intersection(details)
 
 
 def _project(event: Denial) -> Record:
@@ -219,6 +249,7 @@ class AuditReader:
         )
         self._collect = collect
         self._peer = None
+        self._binding = None
         self._cancel = threading.Event()
         self._auth_cancel = Gio.Cancellable()
         self._next_attempt = 0.0
@@ -228,22 +259,63 @@ class AuditReader:
         self._registration = connection.register_object(
             OBJECT_PATH, definition.interfaces[0], self._request, None, None
         )
-        self._subscription = connection.signal_subscribe(
-            DBUS, DBUS, "NameOwnerChanged", DBUS_PATH, None, Gio.DBusSignalFlags.NONE,
-            self._owner_changed,
-        )
+        self._subscriptions = [
+            connection.signal_subscribe(
+                DBUS, DBUS, "NameOwnerChanged", DBUS_PATH, None, Gio.DBusSignalFlags.NONE,
+                self._owner_changed,
+            ),
+            connection.signal_subscribe(
+                LOGIN, "org.freedesktop.DBus.Properties", "PropertiesChanged", None,
+                LOGIN + ".Session", Gio.DBusSignalFlags.NONE, self._session_changed,
+            ),
+            connection.signal_subscribe(
+                LOGIN, LOGIN + ".Manager", "SessionRemoved", LOGIN_PATH, None,
+                Gio.DBusSignalFlags.NONE, self._session_removed,
+            ),
+        ]
 
     def close(self):
-        self._cancel.set()
-        self._auth_cancel.cancel()
-        self._connection.signal_unsubscribe(self._subscription)
+        self._cancel_request()
+        for subscription in self._subscriptions:
+            self._connection.signal_unsubscribe(subscription)
         self._connection.unregister_object(self._registration)
 
+    def _cancel_request(self):
+        self._cancel.set()
+        self._auth_cancel.cancel()
+
     def _owner_changed(self, _connection, _sender, _path, _iface, _signal, values):
-        name, _, owner = values.unpack()
-        if name == self._peer and not owner:
-            self._cancel.set()
-            self._auth_cancel.cancel()
+        name, previous, owner = values.unpack()
+        binding = self._binding
+        if (name == self._peer and not owner) or (
+            binding is not None and name == LOGIN
+            and previous == binding.owner and owner != binding.owner
+        ):
+            self._cancel_request()
+
+    def _session_changed(self, _connection, sender, path, _iface, _signal, values):
+        binding = self._binding
+        if binding is None or (sender, path) != (binding.owner, binding.path):
+            return
+        _, changed, invalidated = values.unpack()
+        if (
+            _IDENTITY_PROPERTIES.intersection(changed)
+            or (_IDENTITY_PROPERTIES | _ACTIVE_PROPERTIES.keys()).intersection(invalidated)
+            or any(key in changed and changed[key] != value
+                   for key, value in _ACTIVE_PROPERTIES.items())
+        ):
+            self._cancel_request()
+
+    def _session_removed(self, _connection, sender, _path, _iface, _signal, values):
+        binding = self._binding
+        session_id, path = values.unpack()
+        if binding is not None and (sender, session_id, path) == (
+            binding.owner, binding.session_id, binding.path
+        ):
+            self._cancel_request()
+
+    def _same_session(self, peer, binding):
+        return not self._cancel.is_set() and self._authorization.binding(peer) == binding
 
     def _request(self, _connection, sender, _path, _interface, method, params, invocation):
         flags = invocation.get_message().get_flags()
@@ -279,23 +351,27 @@ class AuditReader:
         outcome: Outcome = ("unavailable", [])
         try:
             peer = self._authorization.peer(sender)
-            if peer is None or not self._authorization.eligible(peer):
+            binding = self._authorization.binding(peer) if peer is not None else None
+            if binding is None:
                 outcome = ("denied", [])
             else:
+                self._binding = binding
                 now = monotonic()
                 self._recent_uids = {
                     uid: deadline for uid, deadline in self._recent_uids.items() if deadline > now
                 }
                 if peer.uid in self._recent_uids:
                     outcome = ("rate_limited", [])
+                elif not self._same_session(peer, binding):
+                    outcome = ("cancelled", [])
                 else:
                     self._recent_uids[peer.uid] = now + 15
                     if self._authorization.authorize(peer, self._auth_cancel):
-                        if self._cancel.is_set() or not self._authorization.eligible(peer):
+                        if not self._same_session(peer, binding):
                             outcome = ("cancelled", [])
                         else:
                             collected = self._collect(self._cancel)
-                            if self._authorization.eligible(peer):
+                            if self._same_session(peer, binding):
                                 outcome = collected
                             else:
                                 outcome = ("cancelled", [])
@@ -310,6 +386,7 @@ class AuditReader:
 
     def _finish(self, invocation, outcome):
         self._peer = None
+        self._binding = None
         if self._cancel.is_set():
             outcome = ("cancelled", [])
         try:
