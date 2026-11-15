@@ -1,3 +1,3 @@
 """SELinux Lens: evidence-first, read-only SELinux investigations."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
