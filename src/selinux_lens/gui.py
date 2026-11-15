@@ -12,15 +12,25 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk, Pango  # noqa: E402
 
-from . import __version__
 from .audit import load_recent
 from .demo import demo_snapshot
 from .explain import interpret
-from .models import AuditEvidence, Denial, Snapshot
-from .report import serialize_report
+from .models import AuditEvidence, CollectionStatus, Denial, Snapshot
+from .report import write_shareable_report
 
 _CONTROL_CATEGORIES = {"Cc", "Cf", "Cs", "Zl", "Zp"}
 _RELATED_PREVIEW_COUNT = 12
+_EMPTY_TITLES = {
+    CollectionStatus.PERMISSION_DENIED: "Audit access required",
+    CollectionStatus.NO_MATCHES: "No recent AVC denials",
+    CollectionStatus.UNAVAILABLE: "Audit source unavailable",
+    CollectionStatus.FAILED: "Audit query failed",
+    CollectionStatus.TIMED_OUT: "Audit query timed out",
+    CollectionStatus.OUTPUT_LIMIT: "Audit output limit reached",
+    CollectionStatus.CANCELLED: "Audit query cancelled",
+    CollectionStatus.INCOMPLETE: "Audit evidence incomplete",
+    CollectionStatus.MALFORMED: "Audit output could not be read",
+}
 
 
 def audit_preview(text: str, limit: int = 4096) -> str:
@@ -78,6 +88,7 @@ class LensWindow(Adw.ApplicationWindow):
         self._snapshot = Snapshot("Unknown", (), "ausearch")
         self._visible: list[Denial] = []
         self._export_dialog: Gtk.FileChooserNative | None = None
+        self._exporting = False
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
@@ -95,10 +106,8 @@ class LensWindow(Adw.ApplicationWindow):
         header.pack_end(self.export_button)
         toolbar.add_top_bar(header)
 
-        self.notice_label = label(
-            "Reports redact target paths by default. All investigations remain in memory.",
-            style="dim-label",
-        )
+        self.notice_label = label(style="dim-label")
+        self.notice_label.set_visible(False)
         self.notice_label.set_margin_start(18)
         self.notice_label.set_margin_end(18)
         self.notice_label.set_margin_top(10)
@@ -148,15 +157,13 @@ class LensWindow(Adw.ApplicationWindow):
         details.set_margin_top(22)
         details.set_margin_bottom(22)
 
-        self.details_title = label("Select a denial to investigate", style="title-2")
+        self.details_title = label(style="title-2")
         details.append(self.details_title)
         self.details_meta = label("", style="dim-label", selectable=True)
         details.append(self.details_meta)
 
         details.append(label("Observed facts", style="heading"))
-        self.facts_label = label(
-            "Facts extracted from audit records will appear here.", selectable=True
-        )
+        self.facts_label = label(selectable=True)
         details.append(self.facts_label)
 
         details.append(label("Security contexts", style="heading"))
@@ -190,9 +197,15 @@ class LensWindow(Adw.ApplicationWindow):
             style="dim-label",
         ))
 
+        self._details_stack = Gtk.Stack(hhomogeneous=False, vhomogeneous=False)
+        self._status_page = Adw.StatusPage()
+        self._status_page.add_css_class("compact")
+        self._details_stack.add_named(self._status_page, "status")
+        self._details_stack.add_named(details, "event")
+
         right_scroll = Gtk.ScrolledWindow()
         right_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        right_scroll.set_child(details)
+        right_scroll.set_child(self._details_stack)
         content.set_end_child(right_scroll)
         content.set_resize_end_child(True)
         content.set_shrink_end_child(False)
@@ -218,6 +231,8 @@ class LensWindow(Adw.ApplicationWindow):
         self._busy = True
         self.refresh_button.set_sensitive(False)
         self.notice_label.set_text("Reading the recent audit window…")
+        if not self._snapshot.events:
+            self._show_empty_state()
 
         def work() -> None:
             snapshot = load_recent(cancel=self._cancel_collection)
@@ -236,7 +251,8 @@ class LensWindow(Adw.ApplicationWindow):
         self.mode_label.set_text(f"SELinux: {snapshot.mode}")
         text = snapshot.notice or f"Loaded {len(snapshot.events)} recent AVC records."
         self.notice_label.set_text(text)
-        self.export_button.set_sensitive(bool(snapshot.events))
+        self.notice_label.set_visible(bool(snapshot.events))
+        self.export_button.set_sensitive(bool(snapshot.events) and not self._exporting)
         self._update_list()
         return GLib.SOURCE_REMOVE
 
@@ -289,18 +305,44 @@ class LensWindow(Adw.ApplicationWindow):
         else:
             self._selected(self.event_list, None)
 
+    def _show_empty_state(self) -> None:
+        snapshot = self._snapshot
+        if snapshot.events and self._visible:
+            title = "Select a denial"
+            description = "Choose a record to see its evidence and suggested checks."
+        elif snapshot.events:
+            title = "No records match your filters"
+            description = "Change the search or disposition filter to see loaded records."
+        elif self._busy:
+            title = "Reading recent audit records"
+            description = ""
+        else:
+            title = _EMPTY_TITLES.get(snapshot.status, "No audit records loaded")
+            description = snapshot.notice
+            if snapshot.status == CollectionStatus.PERMISSION_DENIED:
+                description = (
+                    "Your account cannot read the system audit logs. "
+                    "Open the fictional demo to explore the investigation view."
+                )
+            elif snapshot.status == CollectionStatus.NO_MATCHES:
+                description = "The query found no denials in the recent audit window."
+                if snapshot.mode == "Disabled":
+                    description += " SELinux is currently disabled."
+        self._status_page.set_title(title)
+        self._status_page.set_description(description)
+        self._details_stack.set_visible_child_name("status")
+
     def _selected(
         self, _list: Gtk.ListBox, row: Gtk.ListBoxRow | None
     ) -> None:
         if row is None:
-            self.details_title.set_text("No denial selected")
-            self.details_meta.set_text("Adjust filters, refresh, or run --demo.")
             for widget in (
-                self.facts_label, self.context_label, self.hypotheses_label,
-                self.checks_label, self.raw_label,
+                self.details_title, self.details_meta, self.facts_label, self.context_label,
+                self.hypotheses_label, self.checks_label, self.raw_label,
             ):
                 widget.set_text("")
             self._show_evidence(None)
+            self._show_empty_state()
             return
         index = row.get_index()
         if index < 0 or index >= len(self._visible):
@@ -327,6 +369,7 @@ class LensWindow(Adw.ApplicationWindow):
         )
         self.raw_label.set_text(audit_preview(event.raw))
         self._show_evidence(event)
+        self._details_stack.set_visible_child_name("event")
 
     def _show_evidence(self, event: Denial | None) -> None:
         evidence = event.evidence if event is not None else None
@@ -349,8 +392,9 @@ class LensWindow(Adw.ApplicationWindow):
         self.related_records.set_text("\n\n".join(previews))
 
     def _export_clicked(self, _button: Gtk.Button) -> None:
-        if self._export_dialog is not None:
+        if self._export_dialog is not None or self._exporting or not self._snapshot.events:
             return
+        snapshot = self._snapshot
         dialog = Gtk.FileChooserNative.new(
             "Export SELinux Lens report", self,
             Gtk.FileChooserAction.SAVE, "Save", "Cancel"
@@ -363,25 +407,46 @@ class LensWindow(Adw.ApplicationWindow):
             try:
                 if result == Gtk.ResponseType.ACCEPT:
                     chosen = chooser.get_file()
-                    if chosen is None or chosen.get_path() is None:
-                        self.notice_label.set_text(
-                            "Only local file destinations are supported for v0.1."
-                        )
+                    path = chosen.get_path() if chosen is not None else None
+                    if path is None:
+                        self._show_export_notice("Choose a local folder for the report.")
                     else:
-                        Path(chosen.get_path()).write_text(
-                            serialize_report(self._snapshot), encoding="utf-8"
-                        )
-                        self.notice_label.set_text(
-                            "Export complete (target paths redacted)."
-                        )
-            except OSError as exc:
-                self.notice_label.set_text(f"Export failed: {exc}")
+                        self._save_report(snapshot, Path(path))
             finally:
                 self._export_dialog = None
                 chooser.destroy()
 
         dialog.connect("response", response)
         dialog.show()
+
+    def _show_export_notice(self, notice: str) -> None:
+        self.notice_label.set_text(notice)
+        self.notice_label.set_visible(True)
+
+    def _save_report(self, snapshot: Snapshot, destination: Path) -> None:
+        self._exporting = True
+        self.export_button.set_sensitive(False)
+        self._show_export_notice("Saving shareable report…")
+
+        def work() -> None:
+            try:
+                write_shareable_report(snapshot, destination)
+            except FileExistsError:
+                notice = "A file already has that name. Choose a new name for the report."
+            except OSError:
+                notice = "Could not save the report to the chosen destination."
+            else:
+                notice = "Shareable report saved."
+            GLib.idle_add(self._finish_export, notice)
+
+        threading.Thread(target=work, name="selinux-lens-export").start()
+
+    def _finish_export(self, notice: str) -> bool:
+        self._exporting = False
+        if not self._cancel_collection.is_set():
+            self.export_button.set_sensitive(bool(self._snapshot.events))
+            self._show_export_notice(notice)
+        return GLib.SOURCE_REMOVE
 
 
 class LensApplication(Adw.Application):

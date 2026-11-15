@@ -25,11 +25,11 @@ Layer separation prevents tests from requiring a graphical environment or privil
 
 `AuditEvidence`: node if recorded, exact audit epoch, the denial's one-based output line number, related `SYSCALL`, `PATH`, and `PROCTITLE` records with their own kinds and line numbers, and the number of PATH items if unambiguously reported by SYSCALL. Correlation uses the capture, node, exact epoch and serial. Line numbers refer to the captured tool output. A missing record or item describes the usable evidence parsed from that output. Any command and path shown as AVC fields still come from the denial record.
 
-`Snapshot`: SELinux mode, immutable tuple of Denial records, data source, user-visible diagnostic notice. The GUI stores the current Snapshot only in process memory.
+`Snapshot`: SELinux mode, immutable tuple of Denial records, data source, typed collection status and a short diagnostic notice. The GUI uses a status page when there is no selected evidence and keeps the current snapshot in process memory.
 
 `Interpretation`: observed text based on fields; possible explanations explicitly speculative; suggested checks that never execute commands automatically.
 
-Report schema: `selinux-lens-report/v1` (see REPORT_FORMAT.md).
+The shareable desktop report uses `selinux-lens-report/v2`. The Python API retains the detailed `selinux-lens-report/v1` format. A worker saves the snapshot selected when the chooser opened and publishes the file only after writing it completely. [JSON report formats](REPORT_FORMAT.md)
 
 ## Collection assumptions and known limitations
 

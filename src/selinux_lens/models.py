@@ -1,6 +1,20 @@
 """Typed, deliberately small audit record model."""
 
 from dataclasses import dataclass, field
+from enum import StrEnum
+
+
+class CollectionStatus(StrEnum):
+    OK = "ok"
+    NO_MATCHES = "no_matches"
+    PERMISSION_DENIED = "permission_denied"
+    UNAVAILABLE = "unavailable"
+    FAILED = "failed"
+    TIMED_OUT = "timed_out"
+    OUTPUT_LIMIT = "output_limit"
+    CANCELLED = "cancelled"
+    INCOMPLETE = "incomplete"
+    MALFORMED = "malformed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,3 +75,4 @@ class Snapshot:
     events: tuple[Denial, ...]
     source: str
     notice: str = ""
+    status: CollectionStatus = CollectionStatus.OK

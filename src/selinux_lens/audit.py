@@ -8,13 +8,13 @@ import selectors
 import signal
 import subprocess
 from collections import defaultdict
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from threading import Event
 from time import monotonic
 from typing import Callable
 
-from .models import AuditEvidence, Denial, RelatedAuditRecord, Snapshot
+from .models import AuditEvidence, CollectionStatus, Denial, RelatedAuditRecord, Snapshot
 
 MAX_OUTPUT_BYTES = 2_000_000
 MAX_ERROR_BYTES = 16_384
@@ -31,8 +31,8 @@ _HEADER = re.compile(
     r"(?:node=([A-Za-z0-9_.:\-]+)[ \t]+)?type=([A-Z_]+)[ \t]+"
     r"msg=audit\(([0-9]{1,19}(?:\.[0-9]{1,9})?):([0-9]{1,20})\):[ \t]*(.*)"
 )
-_DENIED = re.compile(
-    r"avc:[ \t]+denied[ \t]*\{[ \t]*([A-Za-z0-9_]+(?:[ \t]+[A-Za-z0-9_]+)*)"
+_AVC_RESULT = re.compile(
+    r"avc:[ \t]+(denied|granted)[ \t]*\{[ \t]*([A-Za-z0-9_]+(?:[ \t]+[A-Za-z0-9_]+)*)"
     r"[ \t]*\}(?:[ \t]+for)?(?=[ \t]|$)",
     re.IGNORECASE,
 )
@@ -46,6 +46,13 @@ _AVC_TYPES = {"AVC", "USER_AVC"}
 _RELATED_TYPES = {"SYSCALL", "PATH", "PROCTITLE"}
 
 AuditIdentity = tuple[str | None, str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class _ParsedCapture:
+    denials: tuple[Denial, ...]
+    has_avc: bool
+    has_malformed_records: bool
 
 
 def _fields(text: str) -> dict[str, str]:
@@ -68,30 +75,32 @@ def _fields(text: str) -> dict[str, str]:
     return values
 
 
-def _denial(
+def _parse_avc(
     kind: str, identity: AuditIdentity, body: str, raw: str
-) -> Denial | None:
+) -> tuple[Denial | None, bool]:
     outer_pid = ""
-    match = _DENIED.match(body)
+    match = _AVC_RESULT.match(body)
     if match is None and kind == "USER_AVC":
         outer = _fields(body)
         body = outer.get("msg", "")
         outer_pid = outer.get("pid", "")
-        match = _DENIED.match(body)
+        match = _AVC_RESULT.match(body)
     if match is None:
-        return None
+        return None, False
 
     _, epoch, serial = identity
     seconds, _, _ = epoch.partition(".")
     try:
         timestamp = datetime.fromtimestamp(int(seconds), timezone.utc).isoformat(timespec="seconds")
     except (ValueError, OverflowError, OSError):
-        return None
+        return None, False
+    if match[1].lower() == "granted":
+        return None, True
     fields = _fields(body[match.end():])
     return Denial(
         event_id=serial,
         timestamp_utc=timestamp,
-        permissions=" ".join(match[1].split()),
+        permissions=" ".join(match[2].split()),
         source_context=fields.get("scontext", ""),
         target_context=fields.get("tcontext", ""),
         target_class=fields.get("tclass", ""),
@@ -100,7 +109,7 @@ def _denial(
         pid=fields.get("pid", outer_pid),
         permissive={"1": True, "0": False}.get(fields.get("permissive")),
         raw=raw,
-    )
+    ), True
 
 
 def _related_record(
@@ -139,28 +148,42 @@ def parse_ausearch(text: str, limit: int = MAX_EVENTS) -> tuple[Denial, ...]:
     """Parse denials and associate supported records by capture, node and full audit ID."""
     if limit < 1:
         return ()
+    return _parse_capture(text, limit).denials
+
+
+def _parse_capture(text: str, limit: int) -> _ParsedCapture:
     results: list[tuple[AuditIdentity, int, Denial]] = []
     companions: dict[
         AuditIdentity, dict[str, tuple[RelatedAuditRecord, int | None]]
     ] = defaultdict(dict)
+    has_avc = False
+    malformed = False
     for line_number, line in enumerate(text.split("\n"), 1):
+        if not line.strip() or line == "----" or line.startswith("time->"):
+            continue
         if len(line) > MAX_LINE_CHARS:
+            malformed = True
             continue
         # Auditd may append interpreted fields after a group separator.
         # Parse the original portion. Keep the line for local provenance.
         match = _HEADER.fullmatch(line.partition("\x1d")[0])
         if match is None:
+            malformed = True
             continue
         node, kind, epoch, serial, body = match.groups()
         identity = (node, epoch, serial)
         if kind in _AVC_TYPES:
-            event = _denial(kind, identity, body, line)
+            event, valid = _parse_avc(kind, identity, body, line)
+            has_avc |= valid
+            malformed |= not valid
             if event is not None:
                 results.append((identity, line_number, event))
         elif kind in _RELATED_TYPES:
             record = _related_record(kind, body, line, line_number)
             if record is not None:
                 companions[identity].setdefault(line, record)
+            else:
+                malformed = True
 
     results.sort(key=lambda record: _audit_time(record[0]), reverse=True)
     grouped: dict[AuditIdentity, tuple[tuple[RelatedAuditRecord, ...], int | None]] = {}
@@ -176,7 +199,7 @@ def parse_ausearch(text: str, limit: int = MAX_EVENTS) -> tuple[Denial, ...]:
         node, epoch, _ = identity
         evidence = AuditEvidence(node, epoch, line_number, related, expected_paths)
         denials.append(replace(event, evidence=evidence))
-    return tuple(denials)
+    return _ParsedCapture(tuple(denials), has_avc, malformed)
 
 
 class CaptureLimitReached(Exception):
@@ -285,23 +308,27 @@ def load_recent(
             error_limit=MAX_ERROR_BYTES, cancel=cancel,
         )
     except CollectionCancelled:
-        return Snapshot(mode, (), "ausearch", "Audit query cancelled.")
+        return Snapshot(mode, (), "ausearch", "Audit query cancelled.", CollectionStatus.CANCELLED)
     except FileNotFoundError:
         return Snapshot(
             mode, (), "ausearch",
             "ausearch is unavailable. Install audit and retry, or use Demo mode.",
+            CollectionStatus.UNAVAILABLE,
         )
     except PermissionError:
-        return Snapshot(mode, (), "ausearch", "Audit access was denied.")
+        return Snapshot(
+            mode, (), "ausearch", "Audit access was denied.", CollectionStatus.PERMISSION_DENIED
+        )
     except subprocess.TimeoutExpired:
-        return Snapshot(mode, (), "ausearch", "Audit query timed out.")
+        return Snapshot(mode, (), "ausearch", "Audit query timed out.", CollectionStatus.TIMED_OUT)
     except CaptureLimitReached:
         return Snapshot(
             mode, (), "ausearch",
             "Audit query exceeded its output safety limit. No records were loaded.",
+            CollectionStatus.OUTPUT_LIMIT,
         )
     except OSError:
-        return Snapshot(mode, (), "ausearch", "Could not run the audit query.")
+        return Snapshot(mode, (), "ausearch", "Could not run the audit query.", CollectionStatus.FAILED)
 
     if result.returncode != 0:
         error = result.stderr.strip().lower()
@@ -310,16 +337,45 @@ def load_recent(
         )):
             return Snapshot(
                 mode, (), "ausearch",
-                "Audit access was denied. The GUI does not use sudo; see docs/SECURITY.md.",
+                "Audit access was denied while reading the system logs.",
+                CollectionStatus.PERMISSION_DENIED,
             )
         if result.returncode == 1 and not result.stdout and error == b"<no matches>":
-            return Snapshot(mode, (), "ausearch", "No AVC denials in the recent audit window.")
-        return Snapshot(mode, (), "ausearch", f"Audit query failed (exit {result.returncode}).")
+            return Snapshot(
+                mode, (), "ausearch", "No AVC denials in the recent audit window.",
+                CollectionStatus.NO_MATCHES,
+            )
+        if b"error opening" in error and b"no such file or directory" in error:
+            return Snapshot(
+                mode, (), "ausearch", "Audit data is unavailable.",
+                CollectionStatus.UNAVAILABLE,
+            )
+        return Snapshot(
+            mode, (), "ausearch", f"Audit query failed (exit {result.returncode}).",
+            CollectionStatus.FAILED,
+        )
 
-    events = parse_ausearch(result.stdout.decode("utf-8", errors="replace"))
-    notice = (
-        f"Showing the newest {MAX_EVENTS} denials from the recent audit window."
-        if len(events) == MAX_EVENTS
-        else "No parseable AVC denials in the recent audit output." if not events else ""
-    )
-    return Snapshot(mode, events, "ausearch", notice)
+    parsed = _parse_capture(result.stdout.decode("utf-8", errors="replace"), MAX_EVENTS + 1)
+    events = parsed.denials[:MAX_EVENTS]
+    if not parsed.has_avc and parsed.has_malformed_records and not result.stderr:
+        return Snapshot(
+            mode, (), "ausearch", "The audit output did not contain readable AVC records.",
+            CollectionStatus.MALFORMED,
+        )
+    if result.stderr or parsed.has_malformed_records or (result.stdout.strip() and not parsed.has_avc):
+        return Snapshot(
+            mode, events, "ausearch", "Audit output may be incomplete.",
+            CollectionStatus.INCOMPLETE,
+        )
+    if not events:
+        return Snapshot(
+            mode, (), "ausearch", "No AVC denials in the recent audit window.",
+            CollectionStatus.NO_MATCHES,
+        )
+    if len(parsed.denials) > MAX_EVENTS:
+        return Snapshot(
+            mode, events, "ausearch",
+            f"Showing the newest {MAX_EVENTS} denials. The record limit was reached.",
+            CollectionStatus.OUTPUT_LIMIT,
+        )
+    return Snapshot(mode, events, "ausearch")

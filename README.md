@@ -4,7 +4,7 @@
 
 SELinux Lens is a read-only, native Fedora GNOME app for investigating SELinux AVC / USER_AVC audit events. It uses GTK4 + Libadwaita, calls established Linux audit utilities, and distinguishes **observed audit facts** from **possible explanations**. It is not a policy editor or a vulnerability scanner.
 
-**Current version: v0.1.0 (development preview).** See the [Fedora 45 GNOME smoke test](docs/TESTING.md#fedora-gnome-smoke-test) for validated flows and outstanding checks. The project deliberately has no privileged GUI, automatic SELinux policy modifications, or background service.
+**Current version: v0.1.1 (development preview).** Fedora 45 Workstation with GNOME on Wayland is the validated desktop environment. See the [changelog](CHANGELOG.md) and [Fedora smoke tests](docs/TESTING.md#fedora-gnome-smoke-test) for verification and remaining checks.
 
 ## v0.1: implemented
 
@@ -16,7 +16,7 @@ SELinux Lens is a read-only, native Fedora GNOME app for investigating SELinux A
 - Evidence-first descriptions and hypotheses, never definitive root-cause claims from a single AVC.
 - Explicit failures for unavailable commands, permissions, query timeouts, and oversized output.
 - Fictional `--demo` mode for UI review without root or audit access.
-- Export JSON report with target names/paths redacted by default; no raw log lines in exports.
+- Export shareable v2 JSON with per-event identifiers, contexts and paths omitted.
 - Standard-library tests and CI that do not require root, SELinux or GTK.
 
 ### Fedora setup
@@ -24,13 +24,13 @@ SELinux Lens is a read-only, native Fedora GNOME app for investigating SELinux A
 Use Fedora GNOME, Python >=3.11, GTK4, Libadwaita and PyGObject. Install the system dependencies:
 
 ```bash
-sudo dnf install python3 python3-gobject gtk4 libadwaita audit
+sudo dnf install python3 python3-gobject gtk4 libadwaita audit libselinux-utils
 ```
 
 Clone and start from the repository checkout (no pip-installed PyGObject necessary):
 
 ```bash
-git clone https://github.com/tobiasGuta/SELinux-Lens.git
+git clone --branch v0.1.1 https://github.com/tobiasGuta/SELinux-Lens.git
 cd SELinux-Lens
 bash run.sh --demo
 bash run.sh
@@ -55,7 +55,7 @@ The event list shows recent AVC/USER_AVC denials. The detail pane can preview re
 
 ### Export & privacy
 
-The app stores records in memory during the session and does not run a background collector. Export is user-triggered, writes a local JSON report, redacts the target name/path field by default, and omits raw audit lines and related records. **Other fields such as process name, PID, and security contexts remain present** and may reveal sensitive system details: inspect reports before sharing. The Python API offers an explicit `include_paths=True` option for trusted, local workflows, but the GUI does not expose this option in v0.1.
+The app stores records in memory during the session. The GUI exports a shareable v2 JSON report to a new local filename with private file permissions. Choose a direct folder path on a filesystem that supports unnamed temporary files and hard links. It includes requested permissions, object classes and permissive flags, and omits audit IDs, times, commands, PIDs, contexts, paths and raw records. The existing Python API can still generate v1 reports for detailed local workflows. [JSON report formats](docs/REPORT_FORMAT.md)
 
 ### Project documentation for contributors and Codex
 
@@ -81,6 +81,6 @@ The app stores records in memory during the session and does not run a backgroun
 
 ## Status and limitations
 
-This is an early development preview, **not a production-ready security control**. Audit access depends on user privileges and host policy; the initial GUI has no authenticated helper. RPM packaging, background events, authoritative SELinux policy analysis, and automated remediation remain outside this preview. The collector bounds audit stdout to 2 MB and stderr to 16 KiB while reading. Report redaction is partial.
+This is an early development preview, **not a production-ready security control**. Audit access depends on user privileges and host policy; the GUI has no authenticated helper. RPM packaging, background events, authoritative SELinux policy analysis, and automated remediation remain outside this preview. The collector bounds audit stdout to 2 MB and stderr to 16 KiB while reading.
 
 Licensed under MIT. Contributions should follow [AGENTS.md](AGENTS.md) and [docs/SECURITY.md](docs/SECURITY.md).

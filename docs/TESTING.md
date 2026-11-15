@@ -48,6 +48,21 @@ The bounded collector was exercised in the Fedora 45 GNOME Wayland session with 
 
 The correlation UI was exercised in the same session with the fictional demo and synthetic records. Checks covered output line provenance, incomplete PATH counts, permissive wording, keyboard focus traversal, an 8 KiB command with a bidi control, resizing, light and dark styles, and clearing evidence when search returns no rows. Fedora's `ausearch` also returned all three supported companion types from a synthetic audit file.
 
+## Investigation states and shareable export
+
+Fedora 45 GNOME showed distinct status pages for real audit permission denial, a simulated successful empty query and a simulated query failure. Search with no results used a separate filter message. The demo and synthetic evidence checks exercised focus traversal, an 8 KiB value, incomplete PATH evidence, permissive wording, resizing and light and dark appearance.
+
+The GTK in-process native chooser saved a shareable v2 report and handled cancel and an injected write failure. Automated tests verify the v1 report API, v2 redaction, file permissions, existing files and symlinks, failure cleanup, concurrent exports, and the root-launch guard. Portal-backed chooser and physical keyboard testing remain open.
+
+### User-observed v0.1.1 candidate check
+
+- `git pull --ff-only` reported that the local checkout was up to date. `make test` passed all 38 tests on that checkout.
+- `bash run.sh --demo` showed three fictional AVCs. Detail and related-record views rendered, and the PATH indicator showed incomplete evidence.
+- `bash run.sh` ran under the desktop account with SELinux enforcing. The centered **Audit access required** page appeared with zero loaded records and a disabled **Export JSON** button.
+- The inspected demo export used `selinux-lens-report/v2` with three fictional events. Its event objects contained only permissions, target class and permissive disposition. The report contained no raw audit messages, paths, PIDs, process names or security contexts.
+
+Those manual checks covered the visible app and exported contents. File mode, atomic publication, the portal-backed chooser and physical keyboard navigation were outside their scope. The stabilization tests separately exercised no-overwrite and atomic publication behavior, ancestor symlink rejection, and a directory rename during export. A repeat in-process chooser test on Fedora 45 checked the saved file's mode independently. The updated collector and GUI were also checked with simulated malformed, incomplete and unavailable capture outcomes.
+
 ## Future integration tests
 
 The uninstalled reader has a separate private-bus suite. On Fedora, install the standard Gio Python bindings and `dbus-run-session`, then use `make test-prototype`. The suite checks peer credential pinning, absent interaction flags, malformed calls, ineligible and denied callers, disconnect cancellation, concurrency, rate limits, evidence redaction and reply size. It uses synthetic evidence and simulated session and Polkit outcomes. The suite also passed in an isolated rootless Fedora 45 container. Testing the system-service boundary with real authorization and SELinux confinement requires a Fedora VM.
